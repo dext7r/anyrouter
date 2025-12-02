@@ -3,7 +3,7 @@
 // SUPABASE_URL, SUPABASE_KEY, ADMIN_PASSWORD
 
 // 构建时间（部署时更新此值，或使用 CI/CD 自动替换）
-const BUILD_TIME = "2025-12-02T06:18:18Z"; // __BUILD_TIME__
+const BUILD_TIME = "2025-12-02T07:30:00Z"; // __BUILD_TIME__
 
 // 本地配置（如果没有数据库，使用此配置作为 fallback）
 // 注意：不应在代码中硬编码任何实际的 API 密钥
@@ -84,6 +84,7 @@ async function getConfigFromDB(env) {
       }
       config[item.api_url].keys.push({
         id: item.id,
+        key_id: item.key_id,
         token: item.token,
         enabled: item.enabled,
         created_at: item.created_at,
@@ -515,26 +516,26 @@ async function handleProxyRequest(request, env, url) {
 
   let tokenToUse;
 
-  // 判断是 ID 还是直接 token
-  const isNumericId = /^\d+$/.test(keyPart);
+  // 判断是 key_id (6位字母数字) 还是直接 token
+  const isKeyId = /^[a-z0-9]{6}$/.test(keyPart);
 
-  if (isNumericId) {
-    // 按 ID 查找 token
-    const id = parseInt(keyPart, 10);
+  if (isKeyId) {
+    // 按 key_id 查找 token
+    const keyId = keyPart;
 
     // 检查该 API URL 是否在配置中
     if (!config[targetApiUrl]) {
       return jsonResponse({ error: "API URL not configured: " + targetApiUrl }, 404);
     }
 
-    // 在该 URL 的 keys 中查找指定 ID
-    const keyConfig = config[targetApiUrl].keys.find(k => k.id === id);
+    // 在该 URL 的 keys 中查找指定 key_id
+    const keyConfig = config[targetApiUrl].keys.find(k => k.key_id === keyId);
     if (!keyConfig) {
-      return jsonResponse({ error: "Token ID not found: " + id }, 404);
+      return jsonResponse({ error: "Key ID not found: " + keyId }, 404);
     }
 
     if (!keyConfig.enabled) {
-      return jsonResponse({ error: "Token ID " + id + " is disabled" }, 403);
+      return jsonResponse({ error: "Key ID " + keyId + " is disabled" }, 403);
     }
 
     tokenToUse = keyConfig.token;
@@ -1035,19 +1036,19 @@ function getAdminHtml() {
             <div>
               <h3 class="text-lg font-semibold text-gray-800 mb-3"><i class="fas fa-code text-purple-500 mr-2"></i>请求格式</h3>
               <div class="bg-gray-900 rounded-xl p-4 font-mono text-sm text-green-400 overflow-x-auto">
-                Authorization: Bearer &lt;API_URL&gt;:&lt;ID 或 Token&gt;
+                Authorization: Bearer &lt;API_URL&gt;:&lt;Key ID 或 Token&gt;
               </div>
             </div>
 
             <!-- 两种模式 -->
             <div class="grid md:grid-cols-2 gap-4">
               <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-blue-300 relative">
-                <span class="absolute -top-3 left-4 bg-blue-500 text-white text-xs px-3 py-1 rounded-full font-bold">ID 模式</span>
+                <span class="absolute -top-3 left-4 bg-blue-500 text-white text-xs px-3 py-1 rounded-full font-bold">Key ID 模式</span>
                 <h4 class="font-semibold text-blue-800 mb-2 mt-2"><i class="fas fa-database mr-2"></i>从数据库查找</h4>
-                <p class="text-sm text-blue-700 mb-3">使用数字 ID，系统自动查找对应的 Token</p>
+                <p class="text-sm text-blue-700 mb-3">使用 6 位随机 ID，系统自动查找对应的 Token</p>
                 <div class="bg-blue-100 rounded-lg p-3">
-                  <div class="text-xs text-blue-600 mb-1">格式：URL:数字ID</div>
-                  <code class="text-sm text-blue-900 font-mono">Bearer https://api.openai.com:<strong>123</strong></code>
+                  <div class="text-xs text-blue-600 mb-1">格式：URL:6位字母数字</div>
+                  <code class="text-sm text-blue-900 font-mono">Bearer https://api.openai.com:<strong>a3x9k2</strong></code>
                 </div>
                 <div class="mt-3 text-xs text-blue-600"><i class="fas fa-check-circle mr-1"></i>适合：多 Token 轮询、统一管理</div>
               </div>
@@ -1066,7 +1067,7 @@ function getAdminHtml() {
             <!-- 模式判断说明 -->
             <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
               <h4 class="font-semibold text-yellow-800 mb-2"><i class="fas fa-info-circle mr-2"></i>系统如何判断模式？</h4>
-              <p class="text-sm text-yellow-700">冒号后面是<strong>纯数字</strong>→ ID 模式（查数据库）；否则 → 直传模式（直接转发）</p>
+              <p class="text-sm text-yellow-700">冒号后面是<strong>6位字母数字</strong>（如 a3x9k2）→ Key ID 模式（查数据库）；否则 → 直传模式（直接转发）</p>
             </div>
 
             <!-- 示例代码 -->
@@ -1077,7 +1078,7 @@ function getAdminHtml() {
                 <div class="bg-gray-900 rounded-xl p-4 font-mono text-sm overflow-x-auto">
                   <div class="text-gray-400 mb-2"># cURL 示例</div>
                   <div class="text-green-400">curl -X POST '<span class="text-yellow-300 proxy-url-placeholder" id="proxyUrlExample">https://your-proxy.workers.dev</span>/v1/chat/completions' \\</div>
-                  <div class="text-green-400 pl-4">-H 'Authorization: Bearer https://api.openai.com:<span class="text-cyan-300">123</span>' \\</div>
+                  <div class="text-green-400 pl-4">-H 'Authorization: Bearer https://api.openai.com:<span class="text-cyan-300">a3x9k2</span>' \\</div>
                   <div class="text-green-400 pl-4">-H 'Content-Type: application/json' \\</div>
                   <div class="text-green-400 pl-4">-d '{"model": "gpt-4", "messages": [{"role": "user", "content": "Hello"}]}'</div>
                 </div>
@@ -1088,7 +1089,7 @@ function getAdminHtml() {
                   <div class="text-purple-400">from openai import OpenAI</div>
                   <div class="text-green-400 mt-2">client = OpenAI(</div>
                   <div class="text-green-400 pl-4">base_url='<span class="text-yellow-300 proxy-url-placeholder">https://your-proxy.workers.dev</span>/v1',</div>
-                  <div class="text-green-400 pl-4">api_key='https://api.openai.com:<span class="text-cyan-300">123</span>'  <span class="text-gray-500"># URL:ID 格式</span></div>
+                  <div class="text-green-400 pl-4">api_key='https://api.openai.com:<span class="text-cyan-300">a3x9k2</span>'  <span class="text-gray-500"># URL:Key ID 格式</span></div>
                   <div class="text-green-400">)</div>
                 </div>
               </div>
@@ -1441,6 +1442,7 @@ function getAdminHtml() {
         config.keys.forEach(key => {
           rows.push({
             id: key.id,
+            key_id: key.key_id,
             api_url: apiUrl,
             token: key.token,
             enabled: key.enabled,
@@ -1622,7 +1624,7 @@ function getAdminHtml() {
             <tr class="border-b border-gray-100 hover:bg-purple-50 transition-all token-row token-row-\${urlId}">
               <td class="py-3 px-4 pl-12"><span class="text-gray-400 text-sm">#\${tokenIdx + 1}</span></td>
               <td class="py-3 px-4 text-center">
-                <code class="text-sm font-mono bg-purple-100 px-2 py-1 rounded text-purple-700 cursor-pointer hover:bg-purple-200 id-copy-btn" title="点击复制 ID">\${row.id}</code>
+                <code class="text-sm font-mono bg-purple-100 px-2 py-1 rounded text-purple-700 cursor-pointer hover:bg-purple-200 id-copy-btn" title="点击复制 Key ID">\${row.key_id || row.id}</code>
               </td>
               <td class="py-3 px-4">
                 <div class="flex items-center gap-2">

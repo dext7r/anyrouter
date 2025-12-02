@@ -9,7 +9,7 @@
 
 - **多 API 端点**：支持代理到任意 API 地址
 - **多 Token 管理**：每个 API 可配置多个 Token
-- **双模式认证**：支持 Token ID 查找或直接传递 Token
+- **双模式认证**：支持 Key ID 查找或直接传递 Token
 - **Web 管理界面**：可视化配置管理，内置使用指南
 - **数据持久化**：Supabase PostgreSQL 存储
 - **请求头过滤**：自动移除 Cloudflare 特有 headers
@@ -73,16 +73,16 @@ https://your-worker.workers.dev/admin
 ### 请求格式
 
 ```
-Authorization: Bearer <API_URL>:<ID 或 Token>
+Authorization: Bearer <API_URL>:<Key ID 或 Token>
 ```
 
-### 模式一：使用 Token ID
+### 模式一：使用 Key ID
 
-从管理面板获取 Token ID，系统自动查找对应 Token：
+从管理面板获取 6 位随机 Key ID（字母+数字），系统自动查找对应 Token：
 
 ```bash
 curl -X POST 'https://your-proxy.workers.dev/v1/chat/completions' \
-  -H 'Authorization: Bearer https://api.openai.com:123' \
+  -H 'Authorization: Bearer https://api.openai.com:a3x9k2' \
   -H 'Content-Type: application/json' \
   -d '{"model": "gpt-4", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
@@ -105,7 +105,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url='https://your-proxy.workers.dev/v1',
-    api_key='https://api.openai.com:123'  # 格式: api_url:id 或 api_url:token
+    api_key='https://api.openai.com:a3x9k2'  # 格式: api_url:key_id 或 api_url:token
 )
 
 response = client.chat.completions.create(

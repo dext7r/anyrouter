@@ -7,10 +7,28 @@
 -- 3. 复制粘贴此脚本并执行
 
 -- ============================================
--- 1. 创建表
+-- 1. 创建随机 ID 生成函数
+-- ============================================
+CREATE OR REPLACE FUNCTION public.generate_key_id(length INTEGER DEFAULT 6)
+RETURNS TEXT AS $$
+DECLARE
+  chars TEXT := 'abcdefghijklmnopqrstuvwxyz0123456789';
+  result TEXT := '';
+  i INTEGER;
+BEGIN
+  FOR i IN 1..length LOOP
+    result := result || substr(chars, floor(random() * length(chars) + 1)::INTEGER, 1);
+  END LOOP;
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
+-- 2. 创建表
 -- ============================================
 CREATE TABLE IF NOT EXISTS public.api_configs (
   id BIGSERIAL PRIMARY KEY,
+  key_id VARCHAR(6) UNIQUE NOT NULL DEFAULT public.generate_key_id(6),
   api_url TEXT NOT NULL,
   token TEXT NOT NULL,
   enabled BOOLEAN NOT NULL DEFAULT true,
@@ -18,15 +36,43 @@ CREATE TABLE IF NOT EXISTS public.api_configs (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 如果表已存在但没有 key_id 列，添加它
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+    AND table_name = 'api_configs'
+    AND column_name = 'key_id'
+  ) THEN
+    ALTER TABLE public.api_configs
+    ADD COLUMN key_id VARCHAR(6) UNIQUE;
+
+    -- 为已有记录生成 key_id
+    UPDATE public.api_configs
+    SET key_id = public.generate_key_id(6)
+    WHERE key_id IS NULL;
+
+    -- 设置 NOT NULL 约束
+    ALTER TABLE public.api_configs
+    ALTER COLUMN key_id SET NOT NULL;
+
+    -- 设置默认值
+    ALTER TABLE public.api_configs
+    ALTER COLUMN key_id SET DEFAULT public.generate_key_id(6);
+  END IF;
+END $$;
+
 -- ============================================
--- 2. 创建索引（加速查询）
+-- 3. 创建索引（加速查询）
 -- ============================================
+CREATE INDEX IF NOT EXISTS idx_api_configs_key_id ON public.api_configs(key_id);
 CREATE INDEX IF NOT EXISTS idx_api_configs_api_url ON public.api_configs(api_url);
 CREATE INDEX IF NOT EXISTS idx_api_configs_enabled ON public.api_configs(enabled);
 CREATE INDEX IF NOT EXISTS idx_api_configs_created_at ON public.api_configs(created_at DESC);
 
 -- ============================================
--- 3. 启用行级安全 (RLS)
+-- 4. 启用行级安全 (RLS)
 -- ============================================
 ALTER TABLE public.api_configs ENABLE ROW LEVEL SECURITY;
 
@@ -34,8 +80,6 @@ ALTER TABLE public.api_configs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all access with service role" ON public.api_configs;
 
 -- 创建策略：允许所有已认证的请求访问
--- 注意：使用 anon key 访问时，JWT 中 role = 'anon'
--- 使用 service_role key 时会绕过 RLS
 CREATE POLICY "Allow all access with service role"
   ON public.api_configs
   FOR ALL
@@ -44,9 +88,8 @@ CREATE POLICY "Allow all access with service role"
   WITH CHECK (true);
 
 -- ============================================
--- 4. 创建更新时间触发器
+-- 5. 创建更新时间触发器
 -- ============================================
--- 创建更新时间函数
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -55,20 +98,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 删除已存在的触发器（避免重复执行报错）
 DROP TRIGGER IF EXISTS update_api_configs_updated_at ON public.api_configs;
 
--- 创建触发器
 CREATE TRIGGER update_api_configs_updated_at
   BEFORE UPDATE ON public.api_configs
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at_column();
 
 -- ============================================
--- 5. 添加注释
+-- 6. 添加注释
 -- ============================================
 COMMENT ON TABLE public.api_configs IS 'API 代理配置表';
-COMMENT ON COLUMN public.api_configs.id IS '自增主键（用于 Token ID 引用）';
+COMMENT ON COLUMN public.api_configs.id IS '自增主键（内部使用）';
+COMMENT ON COLUMN public.api_configs.key_id IS '6位随机 ID（用于 API 调用）';
 COMMENT ON COLUMN public.api_configs.api_url IS '目标 API 地址';
 COMMENT ON COLUMN public.api_configs.token IS 'API Token';
 COMMENT ON COLUMN public.api_configs.enabled IS '是否启用';
@@ -76,7 +118,7 @@ COMMENT ON COLUMN public.api_configs.created_at IS '创建时间';
 COMMENT ON COLUMN public.api_configs.updated_at IS '更新时间';
 
 -- ============================================
--- 6. 授权（确保 anon 和 authenticated 角色可访问）
+-- 7. 授权
 -- ============================================
 GRANT ALL ON public.api_configs TO anon;
 GRANT ALL ON public.api_configs TO authenticated;
@@ -86,4 +128,5 @@ GRANT USAGE, SELECT ON SEQUENCE public.api_configs_id_seq TO authenticated;
 -- ============================================
 -- 完成！
 -- ============================================
--- 执行成功后，你可以在 Table Editor 中看到 api_configs 表
+-- key_id 格式：6位小写字母+数字，如 "a3x9k2"
+-- 使用方式：Authorization: Bearer https://api.openai.com:a3x9k2
