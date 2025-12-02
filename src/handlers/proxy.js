@@ -225,6 +225,14 @@ export async function handleProxyRequest(request, env, url, ctx) {
     // 添加允许跨域访问的响应头
     modifiedResponse.headers.set('Access-Control-Allow-Origin', '*')
 
+    // SSE 流式响应优化：禁用缓冲，确保实时传输
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('text/event-stream') || contentType.includes('stream')) {
+      modifiedResponse.headers.set('Cache-Control', 'no-cache, no-transform')
+      modifiedResponse.headers.set('X-Accel-Buffering', 'no')
+      modifiedResponse.headers.set('Connection', 'keep-alive')
+    }
+
     // 记录请求统计（使用 waitUntil 确保在响应后完成）
     if (ctx && ctx.waitUntil) {
       ctx.waitUntil(recordRequest(env, {
