@@ -1,17 +1,74 @@
 // ============ 配置区域 ============
-// Supabase 配置 - 请在 Cloudflare Workers 环境变量中设置
-// SUPABASE_URL, SUPABASE_KEY, ADMIN_PASSWORD
+// 环境变量配置（在 Cloudflare Workers 中设置）:
+// - SUPABASE_URL, SUPABASE_KEY: 数据库连接
+// - ADMIN_PASSWORD: 管理面板密码
+// - UPSTASH_REDIS_URL, UPSTASH_REDIS_TOKEN: Redis 缓存（推荐，高并发必选）
+// - CONFIG_KV: Cloudflare KV（可选备用）
 
 // 构建时间（部署时更新此值，或使用 CI/CD 自动替换）
-const BUILD_TIME = "2025-12-02T07:30:00Z"; // __BUILD_TIME__
+const BUILD_TIME = '2025-12-02T07:30:00Z' // __BUILD_TIME__
 
 // 本地配置（如果没有数据库，使用此配置作为 fallback）
-// 注意：不应在代码中硬编码任何实际的 API 密钥
-const FALLBACK_CONFIG = {};
+const FALLBACK_CONFIG = {}
 
-// 配置缓存管理（防止频繁查询数据库）
-const CONFIG_CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟
-let configCache = { value: null, expiresAt: 0 };
+// 缓存配置
+const CONFIG_CACHE_TTL_MS = 10 * 60 * 1000 // 10 分钟（内存缓存）
+const REDIS_CACHE_TTL_SECONDS = 5 * 60 // 5 分钟（Redis 缓存）
+const KV_CACHE_TTL_SECONDS = 5 * 60 // 5 分钟（KV 缓存，备用）
+const CACHE_KEY = 'anyrouter:api_configs'
+let configCache = { value: null, expiresAt: 0 }
+
+// ============ Redis 操作 ============
+
+/**
+ * Upstash Redis REST API 客户端
+ * 使用 HTTP REST API，无需 TCP 连接，适合 Serverless
+ */
+class RedisClient {
+  constructor(url, token) {
+    this.baseUrl = url
+    this.token = token
+  }
+
+  async request(command) {
+    const response = await fetch(`${this.baseUrl}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(command),
+    })
+    const data = await response.json()
+    if (data.error) throw new Error(data.error)
+    return data.result
+  }
+
+  async get(key) {
+    return this.request(['GET', key])
+  }
+
+  async set(key, value, ttlSeconds) {
+    if (ttlSeconds) {
+      return this.request(['SET', key, value, 'EX', ttlSeconds])
+    }
+    return this.request(['SET', key, value])
+  }
+
+  async del(key) {
+    return this.request(['DEL', key])
+  }
+}
+
+/**
+ * 获取 Redis 客户端实例
+ */
+function getRedisClient(env) {
+  if (!env.UPSTASH_REDIS_URL || !env.UPSTASH_REDIS_TOKEN) {
+    return null
+  }
+  return new RedisClient(env.UPSTASH_REDIS_URL, env.UPSTASH_REDIS_TOKEN)
+}
 
 /**
  * 获取缓存的配置
@@ -36,77 +93,164 @@ function setConfigCache(config) {
 }
 
 /**
- * 使配置缓存失效
+ * 使内存缓存失效
  */
 function invalidateConfigCache() {
-  configCache = { value: null, expiresAt: 0 };
+  configCache = { value: null, expiresAt: 0 }
+}
+
+/**
+ * 使所有缓存失效（内存 + Redis + KV）
+ * @param {object} env - 环境变量
+ */
+async function invalidateAllCache(env) {
+  configCache = { value: null, expiresAt: 0 }
+
+  // 清除 Redis 缓存
+  const redis = getRedisClient(env)
+  if (redis) {
+    try {
+      await redis.del(CACHE_KEY)
+    } catch {
+      // 忽略错误
+    }
+  }
+
+  // 清除 KV 缓存（备用）
+  if (env && env.CONFIG_KV) {
+    try {
+      await env.CONFIG_KV.delete(CACHE_KEY)
+    } catch {
+      // 忽略错误
+    }
+  }
 }
 
 // ============ 数据库操作 ============
 
 /**
- * 从 Supabase 获取配置
+ * 从 Supabase 获取配置（支持多级缓存）
+ * 缓存优先级：内存(10min) -> Redis(5min) -> KV(5min,备用) -> 数据库
  */
 async function getConfigFromDB(env) {
-  // 优先返回缓存的配置
-  const cached = getCachedConfig();
-  if (cached) {
-    return cached;
+  // 1. 优先返回内存缓存（最快，~0ms）
+  const memoryCached = getCachedConfig()
+  if (memoryCached) {
+    return memoryCached
   }
 
+  // 2. 尝试从 Redis 缓存获取（推荐，~5-20ms）
+  const redis = getRedisClient(env)
+  if (redis) {
+    try {
+      const redisCached = await redis.get(CACHE_KEY)
+      if (redisCached) {
+        const parsed = JSON.parse(redisCached)
+        setConfigCache(parsed)
+        return parsed
+      }
+    } catch {
+      // Redis 读取失败，继续
+    }
+  }
+
+  // 3. 尝试从 KV 缓存获取（备用，~1-5ms）
+  if (env.CONFIG_KV) {
+    try {
+      const kvCached = await env.CONFIG_KV.get(CACHE_KEY, { type: 'json' })
+      if (kvCached) {
+        setConfigCache(kvCached)
+        return kvCached
+      }
+    } catch {
+      // KV 读取失败，继续
+    }
+  }
+
+  // 4. 无数据库配置时返回 fallback
   if (!env.SUPABASE_URL || !env.SUPABASE_KEY) {
-    setConfigCache(FALLBACK_CONFIG);
-    return FALLBACK_CONFIG;
+    setConfigCache(FALLBACK_CONFIG)
+    return FALLBACK_CONFIG
   }
 
+  // 5. 从数据库查询（最慢，~50-200ms）
   try {
-    const response = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/api_configs?select=*&order=created_at.desc`,
+    // 先尝试带软删除过滤的查询
+    let response = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/api_configs?select=*&deleted_at=is.null&order=created_at.desc`,
       {
         headers: {
           apikey: env.SUPABASE_KEY,
           Authorization: `Bearer ${env.SUPABASE_KEY}`,
         },
-      }
-    );
+      },
+    )
 
+    // 如果查询失败（可能是 deleted_at 列不存在），回退到不带过滤的查询
     if (!response.ok) {
-      setConfigCache(FALLBACK_CONFIG);
-      return FALLBACK_CONFIG;
+      response = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/api_configs?select=*&order=created_at.desc`,
+        {
+          headers: {
+            apikey: env.SUPABASE_KEY,
+            Authorization: `Bearer ${env.SUPABASE_KEY}`,
+          },
+        },
+      )
     }
 
-    const data = await response.json();
-    const config = {};
+    if (!response.ok) {
+      setConfigCache(FALLBACK_CONFIG)
+      return FALLBACK_CONFIG
+    }
+
+    const data = await response.json()
+    const config = {}
 
     data.forEach((item) => {
       if (!config[item.api_url]) {
-        config[item.api_url] = { keys: [] };
+        config[item.api_url] = { keys: [] }
       }
       config[item.api_url].keys.push({
         id: item.id,
         key_id: item.key_id,
         token: item.token,
         enabled: item.enabled,
+        remark: item.remark || '',
         created_at: item.created_at,
         updated_at: item.updated_at,
-      });
-    });
+      })
+    })
 
-    const finalizedConfig =
-      Object.keys(config).length > 0 ? config : FALLBACK_CONFIG;
-    setConfigCache(finalizedConfig);
-    return finalizedConfig;
-  } catch (error) {
-    console.error("Database error:", error);
-    setConfigCache(FALLBACK_CONFIG);
-    return FALLBACK_CONFIG;
+    const finalizedConfig = Object.keys(config).length > 0 ? config : FALLBACK_CONFIG
+
+    // 写入内存缓存
+    setConfigCache(finalizedConfig)
+
+    // 写入 Redis 缓存（异步，不阻塞响应）
+    if (redis) {
+      redis.set(CACHE_KEY, JSON.stringify(finalizedConfig), REDIS_CACHE_TTL_SECONDS)
+        .catch(() => {})
+    }
+
+    // 写入 KV 缓存（备用，异步）
+    if (env.CONFIG_KV) {
+      env.CONFIG_KV.put(CACHE_KEY, JSON.stringify(finalizedConfig), {
+        expirationTtl: KV_CACHE_TTL_SECONDS,
+      }).catch(() => {})
+    }
+
+    return finalizedConfig
+  } catch {
+    setConfigCache(FALLBACK_CONFIG)
+    return FALLBACK_CONFIG
   }
 }
 
 /**
  * 保存配置到数据库
  */
-async function saveConfigToDB(env, apiUrl, token, enabled) {
+async function saveConfigToDB(env, apiUrl, token, enabled, remark = '') {
   if (!env.SUPABASE_URL || !env.SUPABASE_KEY) {
     return { success: false, error: "Database not configured" };
   }
@@ -124,6 +268,7 @@ async function saveConfigToDB(env, apiUrl, token, enabled) {
         api_url: apiUrl,
         token: token,
         enabled: enabled,
+        remark: remark || null,
       }),
     });
 
@@ -175,7 +320,7 @@ async function updateConfigInDB(env, id, updates) {
 }
 
 /**
- * 删除配置
+ * 软删除配置（设置 deleted_at 而非物理删除）
  */
 async function deleteConfigFromDB(env, id) {
   if (!env.SUPABASE_URL || !env.SUPABASE_KEY) {
@@ -186,11 +331,15 @@ async function deleteConfigFromDB(env, id) {
     const response = await fetch(
       `${env.SUPABASE_URL}/rest/v1/api_configs?id=eq.${id}`,
       {
-        method: "DELETE",
+        method: "PATCH",
         headers: {
           apikey: env.SUPABASE_KEY,
           Authorization: `Bearer ${env.SUPABASE_KEY}`,
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          deleted_at: new Date().toISOString(),
+        }),
       }
     );
 
@@ -311,7 +460,16 @@ function validateConfigPayload(body, options = {}) {
     return { valid: false, error: "enabled must be a boolean" };
   }
 
-  if (partial && !("api_url" in body || "token" in body || "enabled" in body)) {
+  if ("remark" in body) {
+    if (body.remark !== null && typeof body.remark !== "string") {
+      return { valid: false, error: "remark must be a string or null" };
+    }
+    if (body.remark && body.remark.length > 255) {
+      return { valid: false, error: "remark must be 255 characters or less" };
+    }
+  }
+
+  if (partial && !("api_url" in body || "token" in body || "enabled" in body || "remark" in body)) {
     return { valid: false, error: "No fields provided for update" };
   }
 
@@ -413,7 +571,8 @@ async function handleApiRequest(request, env, url) {
       env,
       body.api_url,
       body.token,
-      body.enabled ?? true
+      body.enabled ?? true,
+      body.remark || ''
     );
     return jsonResponse(result, result.success ? 200 : 400);
   }
@@ -915,6 +1074,42 @@ function getAdminHtml() {
     #configsTable tbody tr:last-child td {
       border-bottom: none;
     }
+
+    /* Mini 精细化样式 */
+    .mini-input {
+      padding: 6px 10px !important;
+      font-size: 13px !important;
+    }
+
+    .mini-btn {
+      padding: 6px 12px !important;
+      font-size: 12px !important;
+    }
+
+    .mini-table th,
+    .mini-table td {
+      padding: 8px 10px !important;
+      font-size: 12px !important;
+    }
+
+    .mini-card {
+      padding: 16px !important;
+    }
+
+    .mini-text {
+      font-size: 12px !important;
+    }
+
+    .remark-cell {
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .compact-header {
+      padding: 12px 16px !important;
+    }
   </style>
 </head>
 <body class="gradient-bg min-h-screen">
@@ -1113,115 +1308,109 @@ function getAdminHtml() {
       </div>
 
       <!-- Add New Config Card -->
-      <div class="glass-effect rounded-2xl shadow-xl p-8 mb-8 card-hover">
-        <h2 class="text-2xl font-bold text-gray-800 mb-6">
+      <div class="glass-effect rounded-2xl shadow-xl mini-card mb-6 card-hover">
+        <h2 class="text-lg font-bold text-gray-800 mb-4">
           <i class="fas fa-plus-circle mr-2 text-purple-600"></i>添加新配置
         </h2>
-        <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
-          <div class="md:col-span-4">
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              API URL
-              <span class="text-gray-400 text-xs ml-2">(可选择已有或输入新的)</span>
-            </label>
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+          <div class="md:col-span-3">
+            <label class="block text-xs font-medium text-gray-600 mb-1">API URL</label>
             <input
               type="text"
               id="newApiUrl"
               list="existingUrls"
               placeholder="https://api.example.com"
-              class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-purple-500 transition-all"
+              class="w-full mini-input border border-gray-200 rounded-lg focus:outline-none focus:border-purple-500 transition-all"
             >
             <datalist id="existingUrls"></datalist>
           </div>
-          <div class="md:col-span-4">
-            <label class="block text-sm font-medium text-gray-700 mb-2">Token</label>
+          <div class="md:col-span-3">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Token</label>
             <input
               type="text"
               id="newToken"
               placeholder="sk-xxxxxxxxxxxxxxxx"
-              class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-purple-500 transition-all"
+              class="w-full mini-input border border-gray-200 rounded-lg focus:outline-none focus:border-purple-500 transition-all"
+            >
+          </div>
+          <div class="md:col-span-3">
+            <label class="block text-xs font-medium text-gray-600 mb-1">备注</label>
+            <input
+              type="text"
+              id="newRemark"
+              placeholder="可选备注说明"
+              maxlength="255"
+              class="w-full mini-input border border-gray-200 rounded-lg focus:outline-none focus:border-purple-500 transition-all"
             >
           </div>
           <div class="md:col-span-2">
-            <label class="block text-sm font-medium text-gray-700 mb-2">状态</label>
+            <label class="block text-xs font-medium text-gray-600 mb-1">状态</label>
             <select
               id="newEnabled"
-              class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-purple-500 transition-all"
+              class="w-full mini-input border border-gray-200 rounded-lg focus:outline-none focus:border-purple-500 transition-all"
             >
               <option value="true">✓ 启用</option>
               <option value="false">✗ 禁用</option>
             </select>
           </div>
-          <div class="md:col-span-2 flex items-end">
+          <div class="md:col-span-1 flex items-end">
             <button
               id="addBtn"
-              class="w-full py-3 btn-primary text-white rounded-xl font-semibold shadow-lg"
+              class="w-full mini-btn btn-primary text-white rounded-lg font-medium shadow"
             >
-              <i class="fas fa-plus mr-2"></i>添加
+              <i class="fas fa-plus"></i>
             </button>
           </div>
         </div>
       </div>
 
       <!-- Configs Table -->
-      <div class="glass-effect rounded-2xl shadow-xl p-8">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-2xl font-bold text-gray-800">
+      <div class="glass-effect rounded-2xl shadow-xl mini-card">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="text-lg font-bold text-gray-800">
             <i class="fas fa-table mr-2 text-purple-600"></i>配置列表
           </h2>
-          <div class="flex gap-3">
-            <button onclick="copyAllTokens()" class="px-4 py-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-100 transition-all font-medium" title="批量复制所有已启用的 token">
-              <i class="fas fa-copy mr-2"></i>批量复制
+          <div class="flex gap-2">
+            <button onclick="copyAllTokens()" class="mini-btn bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-all font-medium" title="批量复制">
+              <i class="fas fa-copy"></i>
             </button>
-            <select id="sortBy" class="px-4 py-2 bg-purple-100 text-purple-700 rounded-xl font-medium focus:outline-none">
+            <select id="sortBy" class="mini-input bg-purple-50 text-purple-700 rounded-lg font-medium focus:outline-none border-0">
               <option value="created_at">创建时间</option>
               <option value="updated_at">更新时间</option>
               <option value="api_url">API URL</option>
               <option value="enabled">状态</option>
             </select>
-            <button id="refreshBtn" class="px-4 py-2 bg-purple-100 text-purple-700 rounded-xl hover:bg-purple-200 transition-all font-medium">
-              <i class="fas fa-sync-alt mr-2"></i>刷新
+            <button id="refreshBtn" class="mini-btn bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-all font-medium">
+              <i class="fas fa-sync-alt"></i>
             </button>
           </div>
         </div>
         <!-- 搜索框 -->
-        <div class="mb-4">
-          <input type="text" id="searchInput" placeholder="🔍 搜索 API URL 或 Token..."
-                 class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-purple-500 transition-all"
+        <div class="mb-3">
+          <input type="text" id="searchInput" placeholder="搜索 API URL、Token 或备注..."
+                 class="w-full mini-input border border-gray-200 rounded-lg focus:outline-none focus:border-purple-500 transition-all"
                  oninput="filterConfigs()"
           />
         </div>
         <div class="overflow-x-auto">
-          <table id="configsTable" class="w-full">
+          <table id="configsTable" class="w-full mini-table">
             <thead>
-              <tr class="border-b-2 border-purple-200">
-                <th class="text-left py-4 px-4 font-semibold text-gray-700">
-                  <i class="fas fa-globe mr-2 text-purple-600"></i>API URL
-                </th>
-                <th class="text-center py-4 px-4 font-semibold text-gray-700">
-                  <i class="fas fa-hashtag mr-2 text-purple-600"></i>ID
-                </th>
-                <th class="text-left py-4 px-4 font-semibold text-gray-700">
-                  <i class="fas fa-key mr-2 text-purple-600"></i>Token
-                </th>
-                <th class="text-center py-4 px-4 font-semibold text-gray-700">
-                  <i class="fas fa-toggle-on mr-2 text-purple-600"></i>状态
-                </th>
-                <th class="text-left py-4 px-4 font-semibold text-gray-700">
-                  <i class="fas fa-clock mr-2 text-purple-600"></i>创建时间
-                </th>
-                <th class="text-left py-4 px-4 font-semibold text-gray-700">
-                  <i class="fas fa-history mr-2 text-purple-600"></i>更新时间
-                </th>
-                <th class="text-center py-4 px-4 font-semibold text-gray-700">
-                  <i class="fas fa-cog mr-2 text-purple-600"></i>操作
-                </th>
+              <tr class="border-b border-purple-200">
+                <th class="text-left py-2 px-2 font-medium text-gray-600 text-xs">API URL</th>
+                <th class="text-center py-2 px-2 font-medium text-gray-600 text-xs">ID</th>
+                <th class="text-left py-2 px-2 font-medium text-gray-600 text-xs">Token</th>
+                <th class="text-left py-2 px-2 font-medium text-gray-600 text-xs">备注</th>
+                <th class="text-center py-2 px-2 font-medium text-gray-600 text-xs">状态</th>
+                <th class="text-left py-2 px-2 font-medium text-gray-600 text-xs">创建时间</th>
+                <th class="text-left py-2 px-2 font-medium text-gray-600 text-xs">更新时间</th>
+                <th class="text-center py-2 px-2 font-medium text-gray-600 text-xs">操作</th>
               </tr>
             </thead>
             <tbody id="configsTableBody">
               <tr>
-                <td colspan="7" class="text-center text-gray-500 py-12">
-                  <i class="fas fa-spinner fa-spin text-4xl mb-4 text-purple-400"></i>
-                  <p class="text-lg">加载中...</p>
+                <td colspan="8" class="text-center text-gray-500 py-8">
+                  <i class="fas fa-spinner fa-spin text-2xl mb-2 text-purple-400"></i>
+                  <p class="text-sm">加载中...</p>
                 </td>
               </tr>
             </tbody>
@@ -1235,57 +1424,67 @@ function getAdminHtml() {
 
   <!-- 编辑 Modal -->
   <div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style="backdrop-filter: blur(5px);">
-    <div class="glass-effect rounded-2xl shadow-2xl p-8 max-w-2xl w-full mx-4 animate-fade-in">
-      <div class="flex justify-between items-center mb-6">
-        <h3 class="text-2xl font-bold text-gray-800">
+    <div class="glass-effect rounded-xl shadow-2xl p-5 max-w-md w-full mx-4 animate-fade-in">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-bold text-gray-800">
           <i class="fas fa-edit mr-2 text-purple-600"></i>编辑配置
         </h3>
-        <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600 text-2xl">
+        <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600">
           <i class="fas fa-times"></i>
         </button>
       </div>
-      <div class="space-y-4">
+      <div class="space-y-3">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">API URL</label>
+          <label class="block text-xs font-medium text-gray-600 mb-1">API URL</label>
           <input
             type="text"
             id="editApiUrl"
-            class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-purple-500 transition-all bg-gray-50"
+            class="w-full mini-input border border-gray-200 rounded-lg bg-gray-50"
             readonly
           >
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">Token</label>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Token</label>
           <input
             type="text"
             id="editToken"
-            class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-purple-500 transition-all font-mono"
+            class="w-full mini-input border border-gray-200 rounded-lg focus:outline-none focus:border-purple-500 transition-all font-mono"
             placeholder="sk-xxxxxxxxxxxxxxxx"
           >
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">状态</label>
+          <label class="block text-xs font-medium text-gray-600 mb-1">备注</label>
+          <input
+            type="text"
+            id="editRemark"
+            class="w-full mini-input border border-gray-200 rounded-lg focus:outline-none focus:border-purple-500 transition-all"
+            placeholder="可选备注说明"
+            maxlength="255"
+          >
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">状态</label>
           <select
             id="editEnabled"
-            class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-purple-500 transition-all"
+            class="w-full mini-input border border-gray-200 rounded-lg focus:outline-none focus:border-purple-500 transition-all"
           >
-            <option value="true">✓ 启用</option>
-            <option value="false">✗ 禁用</option>
+            <option value="true">启用</option>
+            <option value="false">禁用</option>
           </select>
         </div>
       </div>
-      <div class="flex justify-end gap-3 mt-6">
+      <div class="flex justify-end gap-2 mt-4">
         <button
           onclick="closeEditModal()"
-          class="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-all font-semibold"
+          class="mini-btn bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all font-medium"
         >
           取消
         </button>
         <button
           id="saveEditBtn"
-          class="px-6 py-3 btn-primary text-white rounded-xl font-semibold shadow-lg"
+          class="mini-btn btn-primary text-white rounded-lg font-medium shadow"
         >
-          <i class="fas fa-save mr-2"></i>保存
+          <i class="fas fa-save mr-1"></i>保存
         </button>
       </div>
     </div>
@@ -1366,15 +1565,16 @@ function getAdminHtml() {
     $('#addBtn').click(async function() {
       const apiUrl = $('#newApiUrl').val().trim();
       const token = $('#newToken').val().trim();
+      const remark = $('#newRemark').val().trim();
       const enabled = $('#newEnabled').val() === 'true';
 
       if (!apiUrl || !token) {
-        showToast('请填写完整信息', 'error');
+        showToast('请填写 API URL 和 Token', 'error');
         return;
       }
 
       const btn = $(this);
-      btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-2"></i>添加中...');
+      btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
 
       try {
         const response = await fetch('/api/configs', {
@@ -1383,7 +1583,7 @@ function getAdminHtml() {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer ' + authToken
           },
-          body: JSON.stringify({ api_url: apiUrl, token, enabled })
+          body: JSON.stringify({ api_url: apiUrl, token, enabled, remark })
         });
 
         const result = await response.json();
@@ -1391,15 +1591,16 @@ function getAdminHtml() {
         if (result.success) {
           $('#newApiUrl').val('');
           $('#newToken').val('');
+          $('#newRemark').val('');
           loadConfigs();
-          showToast('配置添加成功！', 'success');
+          showToast('添加成功', 'success');
         } else {
           showToast('添加失败: ' + result.error, 'error');
         }
       } catch (error) {
         showToast('请求失败: ' + error.message, 'error');
       } finally {
-        btn.prop('disabled', false).html('<i class="fas fa-plus mr-2"></i>添加');
+        btn.prop('disabled', false).html('<i class="fas fa-plus"></i>');
       }
     });
 
@@ -1449,6 +1650,7 @@ function getAdminHtml() {
             api_url: apiUrl,
             token: key.token,
             enabled: key.enabled,
+            remark: key.remark || '',
             created_at: key.created_at,
             updated_at: key.updated_at
           });
@@ -1518,7 +1720,8 @@ function getAdminHtml() {
       const filtered = currentConfigs.filter(row =>
         row.api_url.toLowerCase().includes(searchText) ||
         row.token.toLowerCase().includes(searchText) ||
-        maskToken(row.token).toLowerCase().includes(searchText)
+        maskToken(row.token).toLowerCase().includes(searchText) ||
+        (row.remark && row.remark.toLowerCase().includes(searchText))
       );
 
       renderTable(filtered);
@@ -1551,13 +1754,13 @@ function getAdminHtml() {
     function renderTable(rows) {
       if (rows.length === 0) {
         const emptyMsg = isDatabaseMode
-          ? '<p class="text-sm text-gray-400 mt-2">点击上方按钮添加第一个配置</p>'
-          : '<p class="text-sm text-yellow-600 mt-2"><i class="fas fa-info-circle mr-1"></i>当前为直传模式，无需配置即可使用</p>';
+          ? '<p class="text-xs text-gray-400 mt-1">点击上方按钮添加第一个配置</p>'
+          : '<p class="text-xs text-yellow-600 mt-1"><i class="fas fa-info-circle mr-1"></i>直传模式，无需配置</p>';
         $('#configsTableBody').html(\`
           <tr>
-            <td colspan="7" class="text-center text-gray-500 py-12">
-              <i class="fas \${isDatabaseMode ? 'fa-inbox' : 'fa-bolt'} text-6xl mb-4 \${isDatabaseMode ? 'text-gray-300' : 'text-yellow-300'}"></i>
-              <p class="text-xl font-medium">\${isDatabaseMode ? '暂无配置' : '直传模式'}</p>
+            <td colspan="8" class="text-center text-gray-500 py-8">
+              <i class="fas \${isDatabaseMode ? 'fa-inbox' : 'fa-bolt'} text-3xl mb-2 \${isDatabaseMode ? 'text-gray-300' : 'text-yellow-300'}"></i>
+              <p class="text-sm font-medium">\${isDatabaseMode ? '暂无配置' : '直传模式'}</p>
               \${emptyMsg}
             </td>
           </tr>
@@ -1590,30 +1793,29 @@ function getAdminHtml() {
 
         // API URL 行
         html += \`
-          <tr class="bg-gradient-to-r from-purple-50 to-pink-50 border-b-2 border-purple-200 cursor-pointer url-header-row" data-url-id="\${urlId}">
-            <td colspan="7" class="py-4 px-4">
+          <tr class="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-200 cursor-pointer url-header-row" data-url-id="\${urlId}">
+            <td colspan="8" class="py-2 px-3">
               <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                  <i class="fas fa-chevron-down text-purple-600 transition-transform url-toggle" id="toggle-\${urlId}"></i>
-                  <i class="fas fa-globe text-purple-600"></i>
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-chevron-down text-purple-600 text-xs transition-transform url-toggle" id="toggle-\${urlId}"></i>
                   <a href="\${apiUrl}" target="_blank" rel="noopener noreferrer"
-                     class="font-bold text-lg text-purple-700 hover:text-purple-900 hover:underline"
-                     onclick="event.stopPropagation()">
+                     class="font-medium text-xs text-purple-700 hover:text-purple-900 hover:underline truncate max-w-xs"
+                     onclick="event.stopPropagation()" title="\${apiUrl}">
                     \${apiUrl}
                   </a>
-                  <span class="px-3 py-1 bg-purple-200 text-purple-700 rounded-full text-sm font-medium">
-                    \${tokens.length} 个 Token
+                  <span class="px-2 py-0.5 bg-purple-200 text-purple-700 rounded-full text-xs">
+                    \${tokens.length}
                   </span>
-                  <span class="px-3 py-1 \${enabledCount > 0 ? 'bg-green-200 text-green-700' : 'bg-gray-200 text-gray-600'} rounded-full text-sm font-medium">
-                    \${enabledCount} 个启用
+                  <span class="px-2 py-0.5 \${enabledCount > 0 ? 'bg-green-200 text-green-700' : 'bg-gray-200 text-gray-500'} rounded-full text-xs">
+                    \${enabledCount} 启用
                   </span>
                 </div>
-                <div class="flex items-center gap-2 action-buttons">
-                  <button class="px-3 py-2 bg-blue-100 text-blue-600 text-sm rounded-lg hover:bg-blue-200 transition-all copy-url-btn" title="复制 URL" data-url="\${encodeURIComponent(apiUrl)}">
-                    <i class="fas fa-copy mr-1"></i>复制 URL
+                <div class="flex items-center gap-1 action-buttons">
+                  <button class="px-2 py-1 bg-blue-100 text-blue-600 text-xs rounded hover:bg-blue-200 transition-all copy-url-btn" title="复制" data-url="\${encodeURIComponent(apiUrl)}">
+                    <i class="fas fa-copy"></i>
                   </button>
-                  \${isDatabaseMode ? \`<button class="px-3 py-2 bg-green-100 text-green-600 text-sm rounded-lg hover:bg-green-200 transition-all add-token-btn" title="添加 Token" data-url="\${encodeURIComponent(apiUrl)}">
-                    <i class="fas fa-plus mr-1"></i>添加 Token
+                  \${isDatabaseMode ? \`<button class="px-2 py-1 bg-green-100 text-green-600 text-xs rounded hover:bg-green-200 transition-all add-token-btn" title="添加" data-url="\${encodeURIComponent(apiUrl)}">
+                    <i class="fas fa-plus"></i>
                   </button>\` : ''}
                 </div>
               </div>
@@ -1623,29 +1825,28 @@ function getAdminHtml() {
 
         // Token 子行
         tokens.forEach((row, tokenIdx) => {
+          const safeRemark = escapeHtml(row.remark);
           html += \`
-            <tr class="border-b border-gray-100 hover:bg-purple-50 transition-all token-row token-row-\${urlId}">
-              <td class="py-3 px-4 pl-12"><span class="text-gray-400 text-sm">#\${tokenIdx + 1}</span></td>
-              <td class="py-3 px-4 text-center">
-                <div class="flex items-center justify-center gap-2">
-                  <code class="text-sm font-mono bg-purple-100 px-2 py-1 rounded text-purple-700 cursor-pointer hover:bg-purple-200 id-copy-btn" title="点击复制 Key ID">\${row.key_id || row.id}</code>
-                  <button class="px-2 py-1 text-xs bg-green-100 text-green-600 rounded hover:bg-green-200 full-key-copy-btn" data-url="\${encodeURIComponent(apiUrl)}" data-keyid="\${row.key_id || row.id}" title="复制可直接使用的完整 Key"><i class="fas fa-link"></i></button>
+            <tr class="border-b border-gray-50 hover:bg-purple-50 transition-all token-row token-row-\${urlId}">
+              <td class="py-1.5 px-2 pl-6"><span class="text-gray-400 text-xs">#\${tokenIdx + 1}</span></td>
+              <td class="py-1.5 px-2 text-center">
+                <div class="flex items-center justify-center gap-1">
+                  <code class="text-xs font-mono bg-purple-100 px-1.5 py-0.5 rounded text-purple-700 cursor-pointer hover:bg-purple-200 id-copy-btn" title="点击复制">\${row.key_id || row.id}</code>
+                  <button class="p-0.5 text-xs bg-green-100 text-green-600 rounded hover:bg-green-200 full-key-copy-btn" data-url="\${encodeURIComponent(apiUrl)}" data-keyid="\${row.key_id || row.id}" title="复制完整Key"><i class="fas fa-link text-xs"></i></button>
                 </div>
               </td>
-              <td class="py-3 px-4">
-                <div class="flex items-center gap-2">
-                  <code class="text-sm font-mono bg-gray-100 px-3 py-1 rounded-lg text-gray-700 cursor-pointer hover:bg-gray-200 token-copy-btn" data-token="\${window.btoa(row.token)}">\${maskToken(row.token)}</code>
-                  <button class="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 token-copy-btn" data-token="\${window.btoa(row.token)}"><i class="fas fa-copy"></i></button>
-                </div>
+              <td class="py-1.5 px-2">
+                <code class="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 cursor-pointer hover:bg-gray-200 token-copy-btn" data-token="\${window.btoa(row.token)}" title="点击复制">\${maskToken(row.token)}</code>
               </td>
-              <td class="py-3 px-4 text-center">
-                <input type="checkbox" \${row.enabled ? 'checked' : ''} class="w-4 h-4 text-green-600 rounded status-checkbox" data-id="\${row.id}">
+              <td class="py-1.5 px-2 remark-cell text-xs text-gray-500" title="\${safeRemark}">\${safeRemark || '-'}</td>
+              <td class="py-1.5 px-2 text-center">
+                <input type="checkbox" \${row.enabled ? 'checked' : ''} class="w-3 h-3 text-green-600 rounded status-checkbox" data-id="\${row.id}">
               </td>
-              <td class="py-3 px-4 text-sm text-gray-500">\${formatDate(row.created_at)}</td>
-              <td class="py-3 px-4 text-sm text-gray-500">\${formatDate(row.updated_at)}</td>
-              <td class="py-3 px-4 text-center">
-                <button class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 edit-key-btn" data-id="\${row.id}"><i class="fas fa-edit"></i></button>
-                <button class="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 delete-key-action-btn" data-id="\${row.id}"><i class="fas fa-trash-alt"></i></button>
+              <td class="py-1.5 px-2 text-xs text-gray-400">\${formatDate(row.created_at)}</td>
+              <td class="py-1.5 px-2 text-xs text-gray-400">\${formatDate(row.updated_at)}</td>
+              <td class="py-1.5 px-2 text-center">
+                <button class="p-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 edit-key-btn" data-id="\${row.id}"><i class="fas fa-edit text-xs"></i></button>
+                <button class="p-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 delete-key-action-btn" data-id="\${row.id}"><i class="fas fa-trash-alt text-xs"></i></button>
               </td>
             </tr>
           \`;
@@ -1659,12 +1860,12 @@ function getAdminHtml() {
     // 渲染分页
     function renderPagination(totalPages, totalItems) {
       if (totalPages <= 1) { $('#pagination').html(''); return; }
-      let pHtml = '<div class="flex items-center justify-between mt-6 pt-4 border-t border-gray-200"><div class="text-sm text-gray-500">共 ' + totalItems + ' 个 API URL，第 ' + currentPage + '/' + totalPages + ' 页</div><div class="flex gap-2">';
-      if (currentPage > 1) pHtml += '<button class="px-3 py-1 bg-purple-100 text-purple-600 rounded hover:bg-purple-200 page-btn" data-page="' + (currentPage - 1) + '"><i class="fas fa-chevron-left"></i></button>';
+      let pHtml = '<div class="flex items-center justify-between mt-3 pt-3 border-t border-gray-100"><div class="text-xs text-gray-400">' + totalItems + ' 个 API · ' + currentPage + '/' + totalPages + '</div><div class="flex gap-1">';
+      if (currentPage > 1) pHtml += '<button class="px-2 py-0.5 bg-purple-100 text-purple-600 rounded text-xs hover:bg-purple-200 page-btn" data-page="' + (currentPage - 1) + '"><i class="fas fa-chevron-left"></i></button>';
       for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
-        pHtml += '<button class="px-3 py-1 ' + (i === currentPage ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-600 hover:bg-purple-200') + ' rounded page-btn" data-page="' + i + '">' + i + '</button>';
+        pHtml += '<button class="px-2 py-0.5 ' + (i === currentPage ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-600 hover:bg-purple-200') + ' rounded text-xs page-btn" data-page="' + i + '">' + i + '</button>';
       }
-      if (currentPage < totalPages) pHtml += '<button class="px-3 py-1 bg-purple-100 text-purple-600 rounded hover:bg-purple-200 page-btn" data-page="' + (currentPage + 1) + '"><i class="fas fa-chevron-right"></i></button>';
+      if (currentPage < totalPages) pHtml += '<button class="px-2 py-0.5 bg-purple-100 text-purple-600 rounded text-xs hover:bg-purple-200 page-btn" data-page="' + (currentPage + 1) + '"><i class="fas fa-chevron-right"></i></button>';
       pHtml += '</div></div>';
       $('#pagination').html(pHtml);
     }
@@ -1786,6 +1987,7 @@ function getAdminHtml() {
       currentEditId = id;
       $('#editApiUrl').val(config.api_url);
       $('#editToken').val(config.token);
+      $('#editRemark').val(config.remark || '');
       $('#editEnabled').val(config.enabled.toString());
       $('#editModal').removeClass('hidden');
     };
@@ -1801,6 +2003,7 @@ function getAdminHtml() {
       if (!currentEditId) return;
 
       const token = $('#editToken').val().trim();
+      const remark = $('#editRemark').val().trim();
       const enabled = $('#editEnabled').val() === 'true';
 
       if (!token) {
@@ -1809,7 +2012,7 @@ function getAdminHtml() {
       }
 
       const btn = $(this);
-      btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-2"></i>保存中...');
+      btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
 
       try {
         const response = await fetch(\`/api/configs/\${currentEditId}\`, {
@@ -1818,13 +2021,13 @@ function getAdminHtml() {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer ' + authToken
           },
-          body: JSON.stringify({ token, enabled })
+          body: JSON.stringify({ token, enabled, remark })
         });
 
         const result = await response.json();
 
         if (result.success) {
-          showToast('配置更新成功！', 'success');
+          showToast('更新成功', 'success');
           closeEditModal();
           loadConfigs();
         } else {
@@ -1833,7 +2036,7 @@ function getAdminHtml() {
       } catch (error) {
         showToast('请求失败: ' + error.message, 'error');
       } finally {
-        btn.prop('disabled', false).html('<i class="fas fa-save mr-2"></i>保存');
+        btn.prop('disabled', false).html('<i class="fas fa-save mr-1"></i>保存');
       }
     });
 
@@ -1928,34 +2131,19 @@ function getAdminHtml() {
     function formatDate(dateString) {
       if (!dateString) return '-';
       const date = new Date(dateString);
-      const now = new Date();
-      const diff = now - date;
+      if (isNaN(date.getTime())) return '-';
+      const pad = (n) => n.toString().padStart(2, '0');
+      return \`\${date.getFullYear()}-\${pad(date.getMonth() + 1)}-\${pad(date.getDate())} \${pad(date.getHours())}:\${pad(date.getMinutes())}:\${pad(date.getSeconds())}\`;
+    }
 
-      // 小于1分钟
-      if (diff < 60000) {
-        return '刚刚';
-      }
-      // 小于1小时
-      if (diff < 3600000) {
-        return Math.floor(diff / 60000) + ' 分钟前';
-      }
-      // 小于24小时
-      if (diff < 86400000) {
-        return Math.floor(diff / 3600000) + ' 小时前';
-      }
-      // 小于7天
-      if (diff < 604800000) {
-        return Math.floor(diff / 86400000) + ' 天前';
-      }
-
-      // 否则显示完整日期
-      return date.toLocaleDateString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+    // HTML 转义函数，防止 XSS
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
     }
 
     function showLoginPanel() {

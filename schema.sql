@@ -32,9 +32,39 @@ CREATE TABLE IF NOT EXISTS public.api_configs (
   api_url TEXT NOT NULL,
   token TEXT NOT NULL,
   enabled BOOLEAN NOT NULL DEFAULT true,
+  remark VARCHAR(255) DEFAULT NULL,
+  deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- 如果表已存在但没有 remark 列，添加它
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+    AND table_name = 'api_configs'
+    AND column_name = 'remark'
+  ) THEN
+    ALTER TABLE public.api_configs
+    ADD COLUMN remark VARCHAR(255) DEFAULT NULL;
+  END IF;
+END $$;
+
+-- 如果表已存在但没有 deleted_at 列，添加它（软删除支持）
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+    AND table_name = 'api_configs'
+    AND column_name = 'deleted_at'
+  ) THEN
+    ALTER TABLE public.api_configs
+    ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+  END IF;
+END $$;
 
 -- 如果表已存在但没有 key_id 列，添加它
 DO $$
@@ -70,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_api_configs_key_id ON public.api_configs(key_id);
 CREATE INDEX IF NOT EXISTS idx_api_configs_api_url ON public.api_configs(api_url);
 CREATE INDEX IF NOT EXISTS idx_api_configs_enabled ON public.api_configs(enabled);
 CREATE INDEX IF NOT EXISTS idx_api_configs_created_at ON public.api_configs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_configs_deleted_at ON public.api_configs(deleted_at) WHERE deleted_at IS NULL;
 
 -- ============================================
 -- 4. 启用行级安全 (RLS)
@@ -114,6 +145,8 @@ COMMENT ON COLUMN public.api_configs.key_id IS '6位随机 ID（用于 API 调�
 COMMENT ON COLUMN public.api_configs.api_url IS '目标 API 地址';
 COMMENT ON COLUMN public.api_configs.token IS 'API Token';
 COMMENT ON COLUMN public.api_configs.enabled IS '是否启用';
+COMMENT ON COLUMN public.api_configs.remark IS '备注说明';
+COMMENT ON COLUMN public.api_configs.deleted_at IS '软删除时间（NULL表示未删除）';
 COMMENT ON COLUMN public.api_configs.created_at IS '创建时间';
 COMMENT ON COLUMN public.api_configs.updated_at IS '更新时间';
 
