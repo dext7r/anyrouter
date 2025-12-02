@@ -2,8 +2,6 @@
 
 一个轻量级 API 代理服务，支持多 API 端点和多 Token 管理，基于 Cloudflare Workers 构建。
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/dext7r/anyrouter)
-
 > **演示环境**: [proxyanyrouter.jhun.edu.kg](https://proxyanyrouter.jhun.edu.kg)
 > **演示密码**: `123456`
 
