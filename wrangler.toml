@@ -1,0 +1,29 @@
+# AnyRouter - Cloudflare Workers 配置
+# 敏感信息请在 Cloudflare Dashboard -> Settings -> Variables and Secrets 中配置
+
+name = "anyrouter"
+main = "anyrouter.js"
+compatibility_date = "2024-01-01"
+
+# ============================================
+# 环境变量配置说明
+# ============================================
+# 以下变量需要在 Cloudflare Dashboard 中配置：
+#
+# 必须配置：
+#   ADMIN_PASSWORD - 管理面板登录密码
+#
+# 可选配置（密钥管理功能）：
+#   SUPABASE_URL - Supabase 项目 URL
+#   SUPABASE_KEY - Supabase anon/public key
+#
+# 可选配置（统计和缓存功能）：
+#   UPSTASH_REDIS_URL - Upstash Redis REST URL
+#   UPSTASH_REDIS_TOKEN - Upstash Redis REST Token
+#
+# ============================================
+# 本地开发
+# ============================================
+# 复制 wrangler.toml.example 为 wrangler.toml.local
+# 填入你的配置，然后运行：
+#   npx wrangler dev -c wrangler.toml.local

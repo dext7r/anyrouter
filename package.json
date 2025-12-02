@@ -1,0 +1,27 @@
+{
+  "name": "anyrouter",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Lightweight API Proxy Service for Cloudflare Workers",
+  "scripts": {
+    "build": "node build.js",
+    "dev": "wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "esbuild": "^0.27.0",
+    "eslint": "^9.39.1",
+    "globals": "^16.5.0",
+    "wrangler": "^4.48.0"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "api",
+    "proxy"
+  ],
+  "license": "MIT"
+}
