@@ -25,10 +25,12 @@
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/dext7r/anyrouter)
 
-部署后设置环境变量：
+部署后设置环境变量（可选）：
 1. 进入 Cloudflare Dashboard → Workers → 你的 Worker → Settings → Variables
-2. 添加 `ADMIN_PASSWORD`（必需）
-3. 可选：添加 `SUPABASE_URL` 和 `SUPABASE_KEY`（用于持久化存储）
+2. 添加 `ADMIN_PASSWORD`（默认为 `123456`）
+3. 添加 `SUPABASE_URL` 和 `SUPABASE_KEY`（用于持久化存储）
+
+> 未设置 `ADMIN_PASSWORD` 时，默认密码为 `123456`，建议生产环境修改
 
 ### 方式二：命令行部署
 
@@ -153,13 +155,13 @@ curl -X POST 'https://your-proxy.workers.dev/api/configs' \
 
 ## 环境变量
 
-| 变量 | 说明 | 必需 |
+| 变量 | 说明 | 默认值 |
 |------|------|------|
-| `SUPABASE_URL` | Supabase 项目 URL | 否* |
-| `SUPABASE_KEY` | Supabase Anon Key | 否* |
-| `ADMIN_PASSWORD` | 管理员密码 | 是 |
+| `ADMIN_PASSWORD` | 管理员密码 | `123456` |
+| `SUPABASE_URL` | Supabase 项目 URL | - |
+| `SUPABASE_KEY` | Supabase Anon Key | - |
 
-*不配置数据库时使用内存存储
+> 不配置数据库时可使用直传 Token 模式
 
 ## 本地开发
 
