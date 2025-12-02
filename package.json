@@ -1,0 +1,17 @@
+{
+  "name": "anyrouter",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Lightweight API Proxy Service for Cloudflare Workers",
+  "scripts": {
+    "build": "node build.js",
+    "dev": "wrangler dev",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0",
+    "wrangler": "^3.0.0"
+  },
+  "keywords": ["cloudflare", "workers", "api", "proxy"],
+  "license": "MIT"
+}

@@ -29,6 +29,7 @@ $$ LANGUAGE plpgsql;
 CREATE TABLE IF NOT EXISTS public.api_configs (
   id BIGSERIAL PRIMARY KEY,
   key_id VARCHAR(6) UNIQUE NOT NULL DEFAULT public.generate_key_id(6),
+  sk_alias VARCHAR(50) UNIQUE DEFAULT NULL,
   api_url TEXT NOT NULL,
   token TEXT NOT NULL,
   enabled BOOLEAN NOT NULL DEFAULT true,
@@ -93,10 +94,25 @@ BEGIN
   END IF;
 END $$;
 
+-- 如果表已存在但没有 sk_alias 列，添加它（SK 别名支持）
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+    AND table_name = 'api_configs'
+    AND column_name = 'sk_alias'
+  ) THEN
+    ALTER TABLE public.api_configs
+    ADD COLUMN sk_alias VARCHAR(50) UNIQUE DEFAULT NULL;
+  END IF;
+END $$;
+
 -- ============================================
 -- 3. 创建索引（加速查询）
 -- ============================================
 CREATE INDEX IF NOT EXISTS idx_api_configs_key_id ON public.api_configs(key_id);
+CREATE INDEX IF NOT EXISTS idx_api_configs_sk_alias ON public.api_configs(sk_alias) WHERE sk_alias IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_api_configs_api_url ON public.api_configs(api_url);
 CREATE INDEX IF NOT EXISTS idx_api_configs_enabled ON public.api_configs(enabled);
 CREATE INDEX IF NOT EXISTS idx_api_configs_created_at ON public.api_configs(created_at DESC);
@@ -142,6 +158,7 @@ CREATE TRIGGER update_api_configs_updated_at
 COMMENT ON TABLE public.api_configs IS 'API 代理配置表';
 COMMENT ON COLUMN public.api_configs.id IS '自增主键（内部使用）';
 COMMENT ON COLUMN public.api_configs.key_id IS '6位随机 ID（用于 API 调用）';
+COMMENT ON COLUMN public.api_configs.sk_alias IS 'SK 别名（格式：sk-ar-xxx，用于简化认证）';
 COMMENT ON COLUMN public.api_configs.api_url IS '目标 API 地址';
 COMMENT ON COLUMN public.api_configs.token IS 'API Token';
 COMMENT ON COLUMN public.api_configs.enabled IS '是否启用';
@@ -162,4 +179,9 @@ GRANT USAGE, SELECT ON SEQUENCE public.api_configs_id_seq TO authenticated;
 -- 完成！
 -- ============================================
 -- key_id 格式：6位小写字母+数字，如 "a3x9k2"
--- 使用方式：Authorization: Bearer https://api.openai.com:a3x9k2
+-- sk_alias 格式：sk-ar-[32位随机字符]，如 "sk-ar-abcDEF123..."
+--
+-- 使用方式：
+-- 1. SK 别名模式：Authorization: Bearer sk-ar-xxxxxxxx...
+-- 2. Key ID 模式：Authorization: Bearer https://api.openai.com:a3x9k2
+-- 3. 直传模式：  Authorization: Bearer https://api.openai.com:sk-xxx...
