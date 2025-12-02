@@ -245,8 +245,8 @@ function verifyAdmin(request, env) {
     return false;
   }
 
-  const token = authHeader.substring(7);
-  return token === getAdminPassword(env);
+  const token = authHeader.substring(7).trim();
+  return token === getAdminPassword(env).trim();
 }
 
 /**
@@ -1328,7 +1328,7 @@ function getAdminHtml() {
 
     // 登录
     $('#loginBtn').click(function() {
-      const password = $('#passwordInput').val();
+      const password = $('#passwordInput').val().trim();
       if (!password) {
         showError('请输入密码');
         return;
