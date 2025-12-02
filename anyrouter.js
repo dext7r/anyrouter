@@ -1,5 +1,5 @@
 // AnyRouter - API Proxy Service
-// Built at: 2025-12-02T12:09:03.992Z
+// Built at: 2025-12-02T12:20:17.213Z
 // https://github.com/dext7r/anyrouter
 
 var __defProp = Object.defineProperty;
@@ -26,7 +26,7 @@ __export(config_exports, {
 var BUILD_TIME, FALLBACK_CONFIG, CONFIG_CACHE_TTL_MS, REDIS_CACHE_TTL_SECONDS, KV_CACHE_TTL_SECONDS, CACHE_KEY, DEFAULT_ADMIN_PASSWORD;
 var init_config = __esm({
   "src/config.js"() {
-    BUILD_TIME = "2025-12-02T12:09:03.992Z";
+    BUILD_TIME = "2025-12-02T12:20:17.213Z";
     FALLBACK_CONFIG = {};
     CONFIG_CACHE_TTL_MS = 10 * 60 * 1e3;
     REDIS_CACHE_TTL_SECONDS = 5 * 60;
@@ -2959,21 +2959,24 @@ jobs:
                 \u8FDB\u5165 SQL Editor\uFF0C\u6267\u884C\u6570\u636E\u5E93\u521D\u59CB\u5316\u811A\u672C\uFF1A
               </li>
             </ol>
-            <div class="mt-3">
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-xs text-gray-500"><i class="fas fa-database mr-1"></i>schema.sql - \u4ECE GitHub \u5B9E\u65F6\u83B7\u53D6</span>
-                <div class="flex gap-2">
+            <div class="mt-3 border border-gray-200 rounded-lg overflow-hidden">
+              <div class="flex items-center justify-between px-3 py-2 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-all" onclick="toggleSchemaSQL()">
+                <div class="flex items-center gap-2">
+                  <i id="schemaSqlToggle" class="fas fa-chevron-right text-purple-600 text-xs transition-transform"></i>
+                  <span class="text-xs text-gray-600 font-medium"><i class="fas fa-database mr-1"></i>schema.sql - \u4ECE GitHub \u5B9E\u65F6\u83B7\u53D6</span>
+                </div>
+                <div class="flex gap-2" onclick="event.stopPropagation()">
                   <a href="https://github.com/dext7r/anyrouter/blob/main/schema.sql" target="_blank" class="text-xs text-purple-600 hover:underline"><i class="fab fa-github mr-1"></i>\u67E5\u770B\u6E90\u6587\u4EF6</a>
                   <button onclick="loadSchemaSQL()" class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200"><i class="fas fa-sync-alt mr-1"></i>\u5237\u65B0</button>
+                  <button onclick="copyCode('deploy-sql')" class="text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700"><i class="fas fa-copy mr-1"></i>\u590D\u5236</button>
                 </div>
               </div>
-              <div class="code-block relative">
-                <pre><code class="language-sql" id="deploy-sql"><i class="fas fa-spinner fa-spin"></i> \u6B63\u5728\u4ECE GitHub \u52A0\u8F7D schema.sql...</code></pre>
-                <button onclick="copyCode('deploy-sql')" class="copy-btn px-2 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700">
-                  <i class="fas fa-copy"></i>
-                </button>
+              <div id="schemaSqlContent" class="hidden">
+                <div class="code-block relative rounded-none">
+                  <pre style="max-height: 400px; overflow-y: auto;"><code class="language-sql" id="deploy-sql"><i class="fas fa-spinner fa-spin"></i> \u6B63\u5728\u4ECE GitHub \u52A0\u8F7D schema.sql...</code></pre>
+                </div>
               </div>
-              <p class="text-xs text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i>\u811A\u672C\u5305\u542B\uFF1A\u5EFA\u8868\u3001\u7D22\u5F15\u3001RLS \u7B56\u7565\u3001\u89E6\u53D1\u5668\u3001\u8FC1\u79FB\u903B\u8F91\uFF08\u652F\u6301\u5DF2\u6709\u8868\u5347\u7EA7\uFF09</p>
+              <p class="text-xs text-gray-500 px-3 py-2 bg-gray-50 border-t border-gray-200"><i class="fas fa-info-circle mr-1"></i>\u811A\u672C\u5305\u542B\uFF1A\u5EFA\u8868\u3001\u7D22\u5F15\u3001RLS \u7B56\u7565\u3001\u89E6\u53D1\u5668\u3001\u8FC1\u79FB\u903B\u8F91\uFF08\u652F\u6301\u5DF2\u6709\u8868\u5347\u7EA7\uFF09</p>
             </div>
             <ol class="space-y-3 text-sm text-gray-600 mt-3" start="3">
               <li class="flex items-start">
@@ -3167,6 +3170,19 @@ jobs:
 
     // \u9875\u9762\u52A0\u8F7D\u65F6\u81EA\u52A8\u83B7\u53D6 schema.sql
     loadSchemaSQL();
+
+    // \u6298\u53E0/\u5C55\u5F00 schema.sql
+    function toggleSchemaSQL() {
+      const content = document.getElementById('schemaSqlContent');
+      const toggle = document.getElementById('schemaSqlToggle');
+      if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        toggle.style.transform = 'rotate(90deg)';
+      } else {
+        content.classList.add('hidden');
+        toggle.style.transform = 'rotate(0deg)';
+      }
+    }
 
     // \u590D\u5236 Worker \u4EE3\u7801
     const WORKER_JS_URL = 'https://raw.githubusercontent.com/dext7r/anyrouter/main/anyrouter.js';

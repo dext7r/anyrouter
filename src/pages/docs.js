@@ -861,21 +861,24 @@ jobs:
                 进入 SQL Editor，执行数据库初始化脚本：
               </li>
             </ol>
-            <div class="mt-3">
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-xs text-gray-500"><i class="fas fa-database mr-1"></i>schema.sql - 从 GitHub 实时获取</span>
-                <div class="flex gap-2">
+            <div class="mt-3 border border-gray-200 rounded-lg overflow-hidden">
+              <div class="flex items-center justify-between px-3 py-2 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-all" onclick="toggleSchemaSQL()">
+                <div class="flex items-center gap-2">
+                  <i id="schemaSqlToggle" class="fas fa-chevron-right text-purple-600 text-xs transition-transform"></i>
+                  <span class="text-xs text-gray-600 font-medium"><i class="fas fa-database mr-1"></i>schema.sql - 从 GitHub 实时获取</span>
+                </div>
+                <div class="flex gap-2" onclick="event.stopPropagation()">
                   <a href="https://github.com/dext7r/anyrouter/blob/main/schema.sql" target="_blank" class="text-xs text-purple-600 hover:underline"><i class="fab fa-github mr-1"></i>查看源文件</a>
                   <button onclick="loadSchemaSQL()" class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200"><i class="fas fa-sync-alt mr-1"></i>刷新</button>
+                  <button onclick="copyCode('deploy-sql')" class="text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700"><i class="fas fa-copy mr-1"></i>复制</button>
                 </div>
               </div>
-              <div class="code-block relative">
-                <pre><code class="language-sql" id="deploy-sql"><i class="fas fa-spinner fa-spin"></i> 正在从 GitHub 加载 schema.sql...</code></pre>
-                <button onclick="copyCode('deploy-sql')" class="copy-btn px-2 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700">
-                  <i class="fas fa-copy"></i>
-                </button>
+              <div id="schemaSqlContent" class="hidden">
+                <div class="code-block relative rounded-none">
+                  <pre style="max-height: 400px; overflow-y: auto;"><code class="language-sql" id="deploy-sql"><i class="fas fa-spinner fa-spin"></i> 正在从 GitHub 加载 schema.sql...</code></pre>
+                </div>
               </div>
-              <p class="text-xs text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i>脚本包含：建表、索引、RLS 策略、触发器、迁移逻辑（支持已有表升级）</p>
+              <p class="text-xs text-gray-500 px-3 py-2 bg-gray-50 border-t border-gray-200"><i class="fas fa-info-circle mr-1"></i>脚本包含：建表、索引、RLS 策略、触发器、迁移逻辑（支持已有表升级）</p>
             </div>
             <ol class="space-y-3 text-sm text-gray-600 mt-3" start="3">
               <li class="flex items-start">
@@ -1069,6 +1072,19 @@ jobs:
 
     // 页面加载时自动获取 schema.sql
     loadSchemaSQL();
+
+    // 折叠/展开 schema.sql
+    function toggleSchemaSQL() {
+      const content = document.getElementById('schemaSqlContent');
+      const toggle = document.getElementById('schemaSqlToggle');
+      if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        toggle.style.transform = 'rotate(90deg)';
+      } else {
+        content.classList.add('hidden');
+        toggle.style.transform = 'rotate(0deg)';
+      }
+    }
 
     // 复制 Worker 代码
     const WORKER_JS_URL = 'https://raw.githubusercontent.com/dext7r/anyrouter/main/anyrouter.js';
