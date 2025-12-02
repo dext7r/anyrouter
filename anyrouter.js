@@ -1624,7 +1624,10 @@ function getAdminHtml() {
             <tr class="border-b border-gray-100 hover:bg-purple-50 transition-all token-row token-row-\${urlId}">
               <td class="py-3 px-4 pl-12"><span class="text-gray-400 text-sm">#\${tokenIdx + 1}</span></td>
               <td class="py-3 px-4 text-center">
-                <code class="text-sm font-mono bg-purple-100 px-2 py-1 rounded text-purple-700 cursor-pointer hover:bg-purple-200 id-copy-btn" title="点击复制 Key ID">\${row.key_id || row.id}</code>
+                <div class="flex items-center justify-center gap-2">
+                  <code class="text-sm font-mono bg-purple-100 px-2 py-1 rounded text-purple-700 cursor-pointer hover:bg-purple-200 id-copy-btn" title="点击复制 Key ID">\${row.key_id || row.id}</code>
+                  <button class="px-2 py-1 text-xs bg-green-100 text-green-600 rounded hover:bg-green-200 full-key-copy-btn" data-url="\${encodeURIComponent(apiUrl)}" data-keyid="\${row.key_id || row.id}" title="复制可直接使用的完整 Key"><i class="fas fa-link"></i></button>
+                </div>
               </td>
               <td class="py-3 px-4">
                 <div class="flex items-center gap-2">
@@ -1675,6 +1678,24 @@ function getAdminHtml() {
       const id = $(this).text();
       navigator.clipboard.writeText(id).then(() => {
         showToast('ID ' + id + ' 已复制', 'success');
+      });
+    });
+
+    // 复制完整可用 Key (api_url:key_id)
+    $(document).on('click', '.full-key-copy-btn', function() {
+      const url = decodeURIComponent($(this).data('url'));
+      const keyId = $(this).data('keyid');
+      const fullKey = url + ':' + keyId;
+      navigator.clipboard.writeText(fullKey).then(() => {
+        showToast('✓ 完整 Key 已复制: ' + url.substring(0, 20) + '...:' + keyId, 'success');
+      }).catch(() => {
+        const textarea = document.createElement('textarea');
+        textarea.value = fullKey;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showToast('✓ 完整 Key 已复制', 'success');
       });
     });
 
