@@ -1,5 +1,5 @@
 // AnyRouter - API Proxy Service
-// Built at: 2025-12-02T13:37:01.958Z
+// Built at: 2025-12-02T13:54:40.748Z
 // https://github.com/dext7r/anyrouter
 
 var __defProp = Object.defineProperty;
@@ -26,7 +26,7 @@ __export(config_exports, {
 var BUILD_TIME, FALLBACK_CONFIG, CONFIG_CACHE_TTL_MS, REDIS_CACHE_TTL_SECONDS, KV_CACHE_TTL_SECONDS, CACHE_KEY, DEFAULT_ADMIN_PASSWORD;
 var init_config = __esm({
   "src/config.js"() {
-    BUILD_TIME = "2025-12-02T13:37:01.958Z";
+    BUILD_TIME = "2025-12-02T13:54:40.748Z";
     FALLBACK_CONFIG = {};
     CONFIG_CACHE_TTL_MS = 10 * 60 * 1e3;
     REDIS_CACHE_TTL_SECONDS = 5 * 60;
@@ -1037,6 +1037,12 @@ async function handleProxyRequest(request, env, url, ctx) {
     const response = await fetch(modifiedRequest);
     const modifiedResponse = new Response(response.body, response);
     modifiedResponse.headers.set("Access-Control-Allow-Origin", "*");
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("text/event-stream") || contentType.includes("stream")) {
+      modifiedResponse.headers.set("Cache-Control", "no-cache, no-transform");
+      modifiedResponse.headers.set("X-Accel-Buffering", "no");
+      modifiedResponse.headers.set("Connection", "keep-alive");
+    }
     if (ctx && ctx.waitUntil) {
       ctx.waitUntil(recordRequest(env, {
         apiUrl: targetApiUrl,
