@@ -238,11 +238,12 @@ export function getAdminHtml() {
                 <th class="text-center py-2 px-2 font-medium text-gray-600 text-xs">有效期</th>
                 <th class="text-center py-2 px-2 font-medium text-gray-600 text-xs">状态</th>
                 <th class="text-left py-2 px-2 font-medium text-gray-600 text-xs">创建时间</th>
+                <th class="text-left py-2 px-2 font-medium text-gray-600 text-xs">最后请求</th>
                 <th class="text-center py-2 px-2 font-medium text-gray-600 text-xs">操作</th>
               </tr>
             </thead>
             <tbody id="configsTableBody">
-              <tr><td colspan="9" class="text-center text-gray-500 py-8"><i class="fas fa-spinner fa-spin text-2xl mb-2 text-purple-400"></i><p class="text-sm">加载中...</p></td></tr>
+              <tr><td colspan="10" class="text-center text-gray-500 py-8"><i class="fas fa-spinner fa-spin text-2xl mb-2 text-purple-400"></i><p class="text-sm">加载中...</p></td></tr>
             </tbody>
           </table>
         </div>
@@ -335,7 +336,7 @@ export function getAdminHtml() {
       isLoadingConfigs = true;
       // 显示表格 loading 状态
       if (!isLoginAttempt) {
-        $('#configsTableBody').html('<tr><td colspan="8" class="text-center text-gray-500 py-8"><i class="fas fa-spinner fa-spin text-2xl mb-2 text-purple-400"></i><p class="text-sm">加载中...</p></td></tr>');
+        $('#configsTableBody').html('<tr><td colspan="10" class="text-center text-gray-500 py-8"><i class="fas fa-spinner fa-spin text-2xl mb-2 text-purple-400"></i><p class="text-sm">加载中...</p></td></tr>');
       }
       try {
         const response = await fetch('/api/configs', { headers: { 'Authorization': 'Bearer ' + authToken } });
@@ -408,7 +409,7 @@ export function getAdminHtml() {
     function renderTable(rows) {
       if (rows.length === 0) {
         const emptyMsg = isDatabaseMode ? '<p class="text-xs text-gray-400 mt-1">点击上方按钮添加第一个配置</p>' : '<p class="text-xs text-yellow-600 mt-1"><i class="fas fa-info-circle mr-1"></i>直传模式，无需配置</p>';
-        $('#configsTableBody').html('<tr><td colspan="9" class="text-center text-gray-500 py-8"><i class="fas ' + (isDatabaseMode ? 'fa-inbox' : 'fa-bolt') + ' text-3xl mb-2 ' + (isDatabaseMode ? 'text-gray-300' : 'text-yellow-300') + '"></i><p class="text-sm font-medium">' + (isDatabaseMode ? '暂无配置' : '直传模式') + '</p>' + emptyMsg + '</td></tr>');
+        $('#configsTableBody').html('<tr><td colspan="10" class="text-center text-gray-500 py-8"><i class="fas ' + (isDatabaseMode ? 'fa-inbox' : 'fa-bolt') + ' text-3xl mb-2 ' + (isDatabaseMode ? 'text-gray-300' : 'text-yellow-300') + '"></i><p class="text-sm font-medium">' + (isDatabaseMode ? '暂无配置' : '直传模式') + '</p>' + emptyMsg + '</td></tr>');
         $('#pagination').html('');
         return;
       }
@@ -424,7 +425,7 @@ export function getAdminHtml() {
         const enabledCount = tokens.filter(t => t.enabled).length;
         const urlId = 'url-' + urlIdx + '-' + startIdx;
         // 默认折叠，箭头向右
-        html += '<tr class="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-200 cursor-pointer url-header-row" data-url-id="' + urlId + '"><td colspan="9" class="py-2 px-3"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><i class="fas fa-chevron-right text-purple-600 text-xs transition-transform url-toggle" id="toggle-' + urlId + '"></i><a href="' + apiUrl + '" target="_blank" class="font-medium text-xs text-purple-700 hover:text-purple-900 hover:underline truncate max-w-xs" onclick="event.stopPropagation()" title="' + apiUrl + '">' + apiUrl + '</a><span class="px-2 py-0.5 bg-purple-200 text-purple-700 rounded-full text-xs">' + tokens.length + '</span><span class="px-2 py-0.5 ' + (enabledCount > 0 ? 'bg-green-200 text-green-700' : 'bg-gray-200 text-gray-500') + ' rounded-full text-xs">' + enabledCount + ' 启用</span></div><div class="flex items-center gap-1 action-buttons"><button class="px-2 py-1 bg-blue-100 text-blue-600 text-xs rounded hover:bg-blue-200 transition-all copy-url-btn" title="复制" data-url="' + encodeURIComponent(apiUrl) + '"><i class="fas fa-copy"></i></button>' + (isDatabaseMode ? '<button class="px-2 py-1 bg-green-100 text-green-600 text-xs rounded hover:bg-green-200 transition-all add-token-btn" title="添加" data-url="' + encodeURIComponent(apiUrl) + '"><i class="fas fa-plus"></i></button>' : '') + '</div></div></td></tr>';
+        html += '<tr class="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-200 cursor-pointer url-header-row" data-url-id="' + urlId + '"><td colspan="10" class="py-2 px-3"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><i class="fas fa-chevron-right text-purple-600 text-xs transition-transform url-toggle" id="toggle-' + urlId + '"></i><a href="' + apiUrl + '" target="_blank" class="font-medium text-xs text-purple-700 hover:text-purple-900 hover:underline truncate max-w-xs" onclick="event.stopPropagation()" title="' + apiUrl + '">' + apiUrl + '</a><span class="px-2 py-0.5 bg-purple-200 text-purple-700 rounded-full text-xs">' + tokens.length + '</span><span class="px-2 py-0.5 ' + (enabledCount > 0 ? 'bg-green-200 text-green-700' : 'bg-gray-200 text-gray-500') + ' rounded-full text-xs">' + enabledCount + ' 启用</span></div><div class="flex items-center gap-1 action-buttons"><button class="px-2 py-1 bg-blue-100 text-blue-600 text-xs rounded hover:bg-blue-200 transition-all copy-url-btn" title="复制" data-url="' + encodeURIComponent(apiUrl) + '"><i class="fas fa-copy"></i></button>' + (isDatabaseMode ? '<button class="px-2 py-1 bg-green-100 text-green-600 text-xs rounded hover:bg-green-200 transition-all add-token-btn" title="添加" data-url="' + encodeURIComponent(apiUrl) + '"><i class="fas fa-plus"></i></button>' : '') + '</div></div></td></tr>';
         tokens.forEach((row, tokenIdx) => {
           const safeRemark = escapeHtml(row.remark);
           const keyId = row.key_id || row.id;
@@ -434,8 +435,10 @@ export function getAdminHtml() {
             : '<button class="text-xs bg-orange-50 text-orange-600 px-2 py-0.5 rounded hover:bg-orange-100 gen-sk-btn" data-id="' + row.id + '"><i class="fas fa-plus mr-1"></i>生成</button>';
           // 有效期显示
           const expiresHtml = formatExpiry(row.expires_at);
+          // 最后请求时间
+          const lastUsedTime = lastUsedTimes[keyId] ? formatDate(lastUsedTimes[keyId]) : '-';
           // 默认隐藏 token-row
-          html += '<tr class="border-b border-gray-50 hover:bg-purple-50 transition-all token-row token-row-' + urlId + ' hidden"><td class="py-1.5 px-2 pl-6"><span class="text-gray-400 text-xs">#' + (tokenIdx + 1) + '</span></td><td class="py-1.5 px-2 text-center"><div class="flex items-center justify-center gap-1"><code class="text-xs font-mono bg-purple-100 px-1.5 py-0.5 rounded text-purple-700 cursor-pointer hover:bg-purple-200 id-copy-btn" title="点击复制">' + keyId + '</code><button class="p-0.5 text-xs bg-green-100 text-green-600 rounded hover:bg-green-200 full-key-copy-btn" data-url="' + encodeURIComponent(apiUrl) + '" data-keyid="' + keyId + '" title="复制完整Key"><i class="fas fa-link text-xs"></i></button></div></td><td class="py-1.5 px-2">' + skAliasHtml + '</td><td class="py-1.5 px-2"><code class="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 cursor-pointer hover:bg-gray-200 token-copy-btn" data-token="' + window.btoa(row.token) + '" title="点击复制">' + maskToken(row.token) + '</code></td><td class="py-1.5 px-2 remark-cell text-xs text-gray-500" title="' + safeRemark + '">' + (safeRemark || '-') + '</td><td class="py-1.5 px-2 text-center text-xs">' + expiresHtml + '</td><td class="py-1.5 px-2 text-center"><input type="checkbox" ' + (row.enabled ? 'checked' : '') + ' class="w-3 h-3 text-green-600 rounded status-checkbox" data-id="' + row.id + '"></td><td class="py-1.5 px-2 text-xs text-gray-400">' + formatDate(row.created_at) + '</td><td class="py-1.5 px-2 text-center"><button class="p-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 edit-key-btn" data-id="' + row.id + '"><i class="fas fa-edit text-xs"></i></button> <button class="p-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 delete-key-action-btn" data-id="' + row.id + '"><i class="fas fa-trash-alt text-xs"></i></button></td></tr>';
+          html += '<tr class="border-b border-gray-50 hover:bg-purple-50 transition-all token-row token-row-' + urlId + ' hidden"><td class="py-1.5 px-2 pl-6"><span class="text-gray-400 text-xs">#' + (tokenIdx + 1) + '</span></td><td class="py-1.5 px-2 text-center"><div class="flex items-center justify-center gap-1"><code class="text-xs font-mono bg-purple-100 px-1.5 py-0.5 rounded text-purple-700 cursor-pointer hover:bg-purple-200 id-copy-btn" title="点击复制">' + keyId + '</code><button class="p-0.5 text-xs bg-green-100 text-green-600 rounded hover:bg-green-200 full-key-copy-btn" data-url="' + encodeURIComponent(apiUrl) + '" data-keyid="' + keyId + '" title="复制完整Key"><i class="fas fa-link text-xs"></i></button></div></td><td class="py-1.5 px-2">' + skAliasHtml + '</td><td class="py-1.5 px-2"><code class="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 cursor-pointer hover:bg-gray-200 token-copy-btn" data-token="' + window.btoa(row.token) + '" title="点击复制">' + maskToken(row.token) + '</code></td><td class="py-1.5 px-2 remark-cell text-xs text-gray-500" title="' + safeRemark + '">' + (safeRemark || '-') + '</td><td class="py-1.5 px-2 text-center text-xs">' + expiresHtml + '</td><td class="py-1.5 px-2 text-center"><input type="checkbox" ' + (row.enabled ? 'checked' : '') + ' class="w-3 h-3 text-green-600 rounded status-checkbox" data-id="' + row.id + '"></td><td class="py-1.5 px-2 text-xs text-gray-400">' + formatDate(row.created_at) + '</td><td class="py-1.5 px-2 text-xs text-gray-400">' + lastUsedTime + '</td><td class="py-1.5 px-2 text-center"><button class="p-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 edit-key-btn" data-id="' + row.id + '"><i class="fas fa-edit text-xs"></i></button> <button class="p-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 delete-key-action-btn" data-id="' + row.id + '"><i class="fas fa-trash-alt text-xs"></i></button></td></tr>';
         });
       });
       $('#configsTableBody').html(html);

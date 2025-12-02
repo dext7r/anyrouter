@@ -1,5 +1,5 @@
 // AnyRouter - API Proxy Service
-// Built at: 2025-12-02T12:20:17.213Z
+// Built at: 2025-12-02T13:37:01.958Z
 // https://github.com/dext7r/anyrouter
 
 var __defProp = Object.defineProperty;
@@ -26,7 +26,7 @@ __export(config_exports, {
 var BUILD_TIME, FALLBACK_CONFIG, CONFIG_CACHE_TTL_MS, REDIS_CACHE_TTL_SECONDS, KV_CACHE_TTL_SECONDS, CACHE_KEY, DEFAULT_ADMIN_PASSWORD;
 var init_config = __esm({
   "src/config.js"() {
-    BUILD_TIME = "2025-12-02T12:20:17.213Z";
+    BUILD_TIME = "2025-12-02T13:37:01.958Z";
     FALLBACK_CONFIG = {};
     CONFIG_CACHE_TTL_MS = 10 * 60 * 1e3;
     REDIS_CACHE_TTL_SECONDS = 5 * 60;
@@ -1476,11 +1476,12 @@ function getAdminHtml() {
                 <th class="text-center py-2 px-2 font-medium text-gray-600 text-xs">\u6709\u6548\u671F</th>
                 <th class="text-center py-2 px-2 font-medium text-gray-600 text-xs">\u72B6\u6001</th>
                 <th class="text-left py-2 px-2 font-medium text-gray-600 text-xs">\u521B\u5EFA\u65F6\u95F4</th>
+                <th class="text-left py-2 px-2 font-medium text-gray-600 text-xs">\u6700\u540E\u8BF7\u6C42</th>
                 <th class="text-center py-2 px-2 font-medium text-gray-600 text-xs">\u64CD\u4F5C</th>
               </tr>
             </thead>
             <tbody id="configsTableBody">
-              <tr><td colspan="9" class="text-center text-gray-500 py-8"><i class="fas fa-spinner fa-spin text-2xl mb-2 text-purple-400"></i><p class="text-sm">\u52A0\u8F7D\u4E2D...</p></td></tr>
+              <tr><td colspan="10" class="text-center text-gray-500 py-8"><i class="fas fa-spinner fa-spin text-2xl mb-2 text-purple-400"></i><p class="text-sm">\u52A0\u8F7D\u4E2D...</p></td></tr>
             </tbody>
           </table>
         </div>
@@ -1573,7 +1574,7 @@ function getAdminHtml() {
       isLoadingConfigs = true;
       // \u663E\u793A\u8868\u683C loading \u72B6\u6001
       if (!isLoginAttempt) {
-        $('#configsTableBody').html('<tr><td colspan="8" class="text-center text-gray-500 py-8"><i class="fas fa-spinner fa-spin text-2xl mb-2 text-purple-400"></i><p class="text-sm">\u52A0\u8F7D\u4E2D...</p></td></tr>');
+        $('#configsTableBody').html('<tr><td colspan="10" class="text-center text-gray-500 py-8"><i class="fas fa-spinner fa-spin text-2xl mb-2 text-purple-400"></i><p class="text-sm">\u52A0\u8F7D\u4E2D...</p></td></tr>');
       }
       try {
         const response = await fetch('/api/configs', { headers: { 'Authorization': 'Bearer ' + authToken } });
@@ -1646,7 +1647,7 @@ function getAdminHtml() {
     function renderTable(rows) {
       if (rows.length === 0) {
         const emptyMsg = isDatabaseMode ? '<p class="text-xs text-gray-400 mt-1">\u70B9\u51FB\u4E0A\u65B9\u6309\u94AE\u6DFB\u52A0\u7B2C\u4E00\u4E2A\u914D\u7F6E</p>' : '<p class="text-xs text-yellow-600 mt-1"><i class="fas fa-info-circle mr-1"></i>\u76F4\u4F20\u6A21\u5F0F\uFF0C\u65E0\u9700\u914D\u7F6E</p>';
-        $('#configsTableBody').html('<tr><td colspan="9" class="text-center text-gray-500 py-8"><i class="fas ' + (isDatabaseMode ? 'fa-inbox' : 'fa-bolt') + ' text-3xl mb-2 ' + (isDatabaseMode ? 'text-gray-300' : 'text-yellow-300') + '"></i><p class="text-sm font-medium">' + (isDatabaseMode ? '\u6682\u65E0\u914D\u7F6E' : '\u76F4\u4F20\u6A21\u5F0F') + '</p>' + emptyMsg + '</td></tr>');
+        $('#configsTableBody').html('<tr><td colspan="10" class="text-center text-gray-500 py-8"><i class="fas ' + (isDatabaseMode ? 'fa-inbox' : 'fa-bolt') + ' text-3xl mb-2 ' + (isDatabaseMode ? 'text-gray-300' : 'text-yellow-300') + '"></i><p class="text-sm font-medium">' + (isDatabaseMode ? '\u6682\u65E0\u914D\u7F6E' : '\u76F4\u4F20\u6A21\u5F0F') + '</p>' + emptyMsg + '</td></tr>');
         $('#pagination').html('');
         return;
       }
@@ -1662,7 +1663,7 @@ function getAdminHtml() {
         const enabledCount = tokens.filter(t => t.enabled).length;
         const urlId = 'url-' + urlIdx + '-' + startIdx;
         // \u9ED8\u8BA4\u6298\u53E0\uFF0C\u7BAD\u5934\u5411\u53F3
-        html += '<tr class="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-200 cursor-pointer url-header-row" data-url-id="' + urlId + '"><td colspan="9" class="py-2 px-3"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><i class="fas fa-chevron-right text-purple-600 text-xs transition-transform url-toggle" id="toggle-' + urlId + '"></i><a href="' + apiUrl + '" target="_blank" class="font-medium text-xs text-purple-700 hover:text-purple-900 hover:underline truncate max-w-xs" onclick="event.stopPropagation()" title="' + apiUrl + '">' + apiUrl + '</a><span class="px-2 py-0.5 bg-purple-200 text-purple-700 rounded-full text-xs">' + tokens.length + '</span><span class="px-2 py-0.5 ' + (enabledCount > 0 ? 'bg-green-200 text-green-700' : 'bg-gray-200 text-gray-500') + ' rounded-full text-xs">' + enabledCount + ' \u542F\u7528</span></div><div class="flex items-center gap-1 action-buttons"><button class="px-2 py-1 bg-blue-100 text-blue-600 text-xs rounded hover:bg-blue-200 transition-all copy-url-btn" title="\u590D\u5236" data-url="' + encodeURIComponent(apiUrl) + '"><i class="fas fa-copy"></i></button>' + (isDatabaseMode ? '<button class="px-2 py-1 bg-green-100 text-green-600 text-xs rounded hover:bg-green-200 transition-all add-token-btn" title="\u6DFB\u52A0" data-url="' + encodeURIComponent(apiUrl) + '"><i class="fas fa-plus"></i></button>' : '') + '</div></div></td></tr>';
+        html += '<tr class="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-200 cursor-pointer url-header-row" data-url-id="' + urlId + '"><td colspan="10" class="py-2 px-3"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><i class="fas fa-chevron-right text-purple-600 text-xs transition-transform url-toggle" id="toggle-' + urlId + '"></i><a href="' + apiUrl + '" target="_blank" class="font-medium text-xs text-purple-700 hover:text-purple-900 hover:underline truncate max-w-xs" onclick="event.stopPropagation()" title="' + apiUrl + '">' + apiUrl + '</a><span class="px-2 py-0.5 bg-purple-200 text-purple-700 rounded-full text-xs">' + tokens.length + '</span><span class="px-2 py-0.5 ' + (enabledCount > 0 ? 'bg-green-200 text-green-700' : 'bg-gray-200 text-gray-500') + ' rounded-full text-xs">' + enabledCount + ' \u542F\u7528</span></div><div class="flex items-center gap-1 action-buttons"><button class="px-2 py-1 bg-blue-100 text-blue-600 text-xs rounded hover:bg-blue-200 transition-all copy-url-btn" title="\u590D\u5236" data-url="' + encodeURIComponent(apiUrl) + '"><i class="fas fa-copy"></i></button>' + (isDatabaseMode ? '<button class="px-2 py-1 bg-green-100 text-green-600 text-xs rounded hover:bg-green-200 transition-all add-token-btn" title="\u6DFB\u52A0" data-url="' + encodeURIComponent(apiUrl) + '"><i class="fas fa-plus"></i></button>' : '') + '</div></div></td></tr>';
         tokens.forEach((row, tokenIdx) => {
           const safeRemark = escapeHtml(row.remark);
           const keyId = row.key_id || row.id;
@@ -1672,8 +1673,10 @@ function getAdminHtml() {
             : '<button class="text-xs bg-orange-50 text-orange-600 px-2 py-0.5 rounded hover:bg-orange-100 gen-sk-btn" data-id="' + row.id + '"><i class="fas fa-plus mr-1"></i>\u751F\u6210</button>';
           // \u6709\u6548\u671F\u663E\u793A
           const expiresHtml = formatExpiry(row.expires_at);
+          // \u6700\u540E\u8BF7\u6C42\u65F6\u95F4
+          const lastUsedTime = lastUsedTimes[keyId] ? formatDate(lastUsedTimes[keyId]) : '-';
           // \u9ED8\u8BA4\u9690\u85CF token-row
-          html += '<tr class="border-b border-gray-50 hover:bg-purple-50 transition-all token-row token-row-' + urlId + ' hidden"><td class="py-1.5 px-2 pl-6"><span class="text-gray-400 text-xs">#' + (tokenIdx + 1) + '</span></td><td class="py-1.5 px-2 text-center"><div class="flex items-center justify-center gap-1"><code class="text-xs font-mono bg-purple-100 px-1.5 py-0.5 rounded text-purple-700 cursor-pointer hover:bg-purple-200 id-copy-btn" title="\u70B9\u51FB\u590D\u5236">' + keyId + '</code><button class="p-0.5 text-xs bg-green-100 text-green-600 rounded hover:bg-green-200 full-key-copy-btn" data-url="' + encodeURIComponent(apiUrl) + '" data-keyid="' + keyId + '" title="\u590D\u5236\u5B8C\u6574Key"><i class="fas fa-link text-xs"></i></button></div></td><td class="py-1.5 px-2">' + skAliasHtml + '</td><td class="py-1.5 px-2"><code class="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 cursor-pointer hover:bg-gray-200 token-copy-btn" data-token="' + window.btoa(row.token) + '" title="\u70B9\u51FB\u590D\u5236">' + maskToken(row.token) + '</code></td><td class="py-1.5 px-2 remark-cell text-xs text-gray-500" title="' + safeRemark + '">' + (safeRemark || '-') + '</td><td class="py-1.5 px-2 text-center text-xs">' + expiresHtml + '</td><td class="py-1.5 px-2 text-center"><input type="checkbox" ' + (row.enabled ? 'checked' : '') + ' class="w-3 h-3 text-green-600 rounded status-checkbox" data-id="' + row.id + '"></td><td class="py-1.5 px-2 text-xs text-gray-400">' + formatDate(row.created_at) + '</td><td class="py-1.5 px-2 text-center"><button class="p-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 edit-key-btn" data-id="' + row.id + '"><i class="fas fa-edit text-xs"></i></button> <button class="p-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 delete-key-action-btn" data-id="' + row.id + '"><i class="fas fa-trash-alt text-xs"></i></button></td></tr>';
+          html += '<tr class="border-b border-gray-50 hover:bg-purple-50 transition-all token-row token-row-' + urlId + ' hidden"><td class="py-1.5 px-2 pl-6"><span class="text-gray-400 text-xs">#' + (tokenIdx + 1) + '</span></td><td class="py-1.5 px-2 text-center"><div class="flex items-center justify-center gap-1"><code class="text-xs font-mono bg-purple-100 px-1.5 py-0.5 rounded text-purple-700 cursor-pointer hover:bg-purple-200 id-copy-btn" title="\u70B9\u51FB\u590D\u5236">' + keyId + '</code><button class="p-0.5 text-xs bg-green-100 text-green-600 rounded hover:bg-green-200 full-key-copy-btn" data-url="' + encodeURIComponent(apiUrl) + '" data-keyid="' + keyId + '" title="\u590D\u5236\u5B8C\u6574Key"><i class="fas fa-link text-xs"></i></button></div></td><td class="py-1.5 px-2">' + skAliasHtml + '</td><td class="py-1.5 px-2"><code class="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 cursor-pointer hover:bg-gray-200 token-copy-btn" data-token="' + window.btoa(row.token) + '" title="\u70B9\u51FB\u590D\u5236">' + maskToken(row.token) + '</code></td><td class="py-1.5 px-2 remark-cell text-xs text-gray-500" title="' + safeRemark + '">' + (safeRemark || '-') + '</td><td class="py-1.5 px-2 text-center text-xs">' + expiresHtml + '</td><td class="py-1.5 px-2 text-center"><input type="checkbox" ' + (row.enabled ? 'checked' : '') + ' class="w-3 h-3 text-green-600 rounded status-checkbox" data-id="' + row.id + '"></td><td class="py-1.5 px-2 text-xs text-gray-400">' + formatDate(row.created_at) + '</td><td class="py-1.5 px-2 text-xs text-gray-400">' + lastUsedTime + '</td><td class="py-1.5 px-2 text-center"><button class="p-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 edit-key-btn" data-id="' + row.id + '"><i class="fas fa-edit text-xs"></i></button> <button class="p-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 delete-key-action-btn" data-id="' + row.id + '"><i class="fas fa-trash-alt text-xs"></i></button></td></tr>';
         });
       });
       $('#configsTableBody').html(html);
