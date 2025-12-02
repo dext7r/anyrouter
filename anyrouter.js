@@ -547,7 +547,8 @@ async function handleProxyRequest(request, env, url) {
   // 设置目标主机和协议
   const targetUrl = new URL(targetApiUrl);
   url.protocol = targetUrl.protocol;
-  url.host = targetUrl.host;
+  url.hostname = targetUrl.hostname;
+  url.port = targetUrl.port || "";
 
   // 获取原始请求头
   const headers = new Headers(request.headers);
