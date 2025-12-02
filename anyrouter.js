@@ -1337,7 +1337,7 @@ function getAdminHtml() {
       localStorage.setItem('authToken', password);
 
       // 测试密码是否正确
-      loadConfigs();
+      loadConfigs(true);
     });
 
     $('#passwordInput').keypress(function(e) {
@@ -1400,7 +1400,7 @@ function getAdminHtml() {
     });
 
     // 加载配置列表
-    async function loadConfigs() {
+    async function loadConfigs(isLoginAttempt = false) {
       try {
         const response = await fetch('/api/configs', {
           headers: {
@@ -1418,7 +1418,12 @@ function getAdminHtml() {
         const result = await response.json();
 
         if (result.success) {
-          showAdminPanel();
+          // 仅在登录尝试时切换到管理面板
+          if (isLoginAttempt) {
+            $('#loginPanel').addClass('hidden');
+            $('#adminPanel').removeClass('hidden');
+            checkSystemStatus();
+          }
           renderConfigs(result.data);
         } else {
           showError('加载失败: ' + result.error);
