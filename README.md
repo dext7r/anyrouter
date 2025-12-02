@@ -2,6 +2,8 @@
 
 一个轻量级 API 代理服务，支持多 API 端点和多 Token 管理，基于 Cloudflare Workers 构建。
 
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/dext7r/anyrouter)
+
 > **演示环境**: [proxyanyrouter.jhun.edu.kg](https://proxyanyrouter.jhun.edu.kg)
 > **演示密码**: `123456`
 
@@ -17,15 +19,24 @@
 
 ## 快速开始
 
-### 1. 准备数据库（Supabase）
+### 方式一：一键部署（推荐）
 
-1. 登录 [Supabase](https://supabase.com/) 创建项目
-2. 在 SQL Editor 中执行 `schema.sql`
-3. 获取 Project URL 和 Anon Key
+点击下方按钮，自动 Fork 并部署到你的 Cloudflare 账户：
 
-### 2. 部署到 Cloudflare Workers
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/dext7r/anyrouter)
+
+部署后设置环境变量：
+1. 进入 Cloudflare Dashboard → Workers → 你的 Worker → Settings → Variables
+2. 添加 `ADMIN_PASSWORD`（必需）
+3. 可选：添加 `SUPABASE_URL` 和 `SUPABASE_KEY`（用于持久化存储）
+
+### 方式二：命令行部署
 
 ```bash
+# 克隆仓库
+git clone https://github.com/dext7r/anyrouter.git
+cd anyrouter
+
 # 安装 wrangler
 npm install -g wrangler
 
@@ -33,15 +44,25 @@ npm install -g wrangler
 wrangler login
 
 # 设置密钥
-wrangler secret put SUPABASE_URL
-wrangler secret put SUPABASE_KEY
 wrangler secret put ADMIN_PASSWORD
+wrangler secret put SUPABASE_URL      # 可选
+wrangler secret put SUPABASE_KEY      # 可选
 
 # 部署
 wrangler deploy
 ```
 
-### 3. 访问管理面板
+### 配置数据库（可选）
+
+如需持久化存储 Token 配置：
+
+1. 登录 [Supabase](https://supabase.com/) 创建项目
+2. 在 SQL Editor 中执行 `schema.sql`
+3. 获取 Project URL 和 Anon Key，配置到环境变量
+
+> 不配置数据库时，可使用直传 Token 模式（模式二）
+
+### 访问管理面板
 
 ```
 https://your-worker.workers.dev/admin
