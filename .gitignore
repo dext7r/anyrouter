@@ -7,6 +7,10 @@
 wrangler.toml.local
 wrangler.toml.backup
 
+# 构建产物
+anyrouter.js
+_worker.js
+
 # Node
 node_modules/
 
