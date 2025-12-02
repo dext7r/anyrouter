@@ -9,8 +9,8 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "devDependencies": {
-    "esbuild": "^0.20.0",
-    "wrangler": "^3.0.0"
+    "esbuild": "^0.27.0",
+    "wrangler": "^4.51.0"
   },
   "keywords": ["cloudflare", "workers", "api", "proxy"],
   "license": "MIT"
