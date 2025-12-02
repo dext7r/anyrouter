@@ -544,8 +544,10 @@ async function handleProxyRequest(request, env, url) {
     tokenToUse = keyPart;
   }
 
-  // 设置目标主机
-  url.host = targetApiUrl.replace(/^https?:\/\//, "");
+  // 设置目标主机和协议
+  const targetUrl = new URL(targetApiUrl);
+  url.protocol = targetUrl.protocol;
+  url.host = targetUrl.host;
 
   // 获取原始请求头
   const headers = new Headers(request.headers);
