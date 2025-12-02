@@ -2,6 +2,9 @@
 // Supabase 配置 - 请在 Cloudflare Workers 环境变量中设置
 // SUPABASE_URL, SUPABASE_KEY, ADMIN_PASSWORD
 
+// 构建时间（部署时更新此值，或使用 CI/CD 自动替换）
+const BUILD_TIME = "2025-12-02T06:18:18Z"; // __BUILD_TIME__
+
 // 本地配置（如果没有数据库，使用此配置作为 fallback）
 // 注意：不应在代码中硬编码任何实际的 API 密钥
 const FALLBACK_CONFIG = {};
@@ -767,7 +770,10 @@ function getStatusHtml() {
     </div>
   </div>
   <div class="footer">
-    Powered by <a href="https://workers.cloudflare.com" target="_blank">Cloudflare Workers</a>
+    <div>Powered by <a href="https://workers.cloudflare.com" target="_blank">Cloudflare Workers</a></div>
+    <div style="margin-top: 8px; font-size: 12px; opacity: 0.7;">
+      <i class="fas fa-clock"></i> 部署时间: ${new Date(BUILD_TIME).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+    </div>
   </div>
 </body>
 </html>`;
@@ -1930,6 +1936,7 @@ function getAdminHtml() {
       $('#loginPanel').addClass('hidden');
       $('#adminPanel').removeClass('hidden');
       checkSystemStatus();
+      loadConfigs();
     }
 
     // 检查系统状态
