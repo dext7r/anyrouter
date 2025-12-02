@@ -222,6 +222,16 @@ function getRandomEnabledKey(config, apiUrl) {
   return enabledKeys[randomIndex].token;
 }
 
+// 默认管理员密码
+const DEFAULT_ADMIN_PASSWORD = "123456";
+
+/**
+ * 获取管理员密码（优先使用环境变量，否则使用默认值）
+ */
+function getAdminPassword(env) {
+  return env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
+}
+
 /**
  * 验证管理员密码
  */
@@ -232,7 +242,7 @@ function verifyAdmin(request, env) {
   }
 
   const token = authHeader.substring(7);
-  return token === env.ADMIN_PASSWORD;
+  return token === getAdminPassword(env);
 }
 
 /**
@@ -565,40 +575,164 @@ function getStatusHtml() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Service Status</title>
+  <title>AnyRouter - API Proxy Service</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
+      min-height: 100vh;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
     }
-    .container {
+    .card {
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 24px;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+      padding: 48px;
+      max-width: 520px;
+      width: 100%;
       text-align: center;
-      background: white;
-      padding: 60px 80px;
+    }
+    .logo {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       border-radius: 20px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
     }
+    .logo i { font-size: 36px; color: white; }
     h1 {
-      font-size: 72px;
-      margin: 0;
-      color: #4caf50;
+      font-size: 32px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 8px;
     }
-    p {
-      font-size: 24px;
+    .tagline {
       color: #666;
-      margin: 20px 0 0 0;
+      font-size: 16px;
+      margin-bottom: 24px;
     }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      padding: 10px 24px;
+      border-radius: 50px;
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 32px;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+    }
+    .status i { animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .features {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-bottom: 32px;
+      text-align: left;
+    }
+    .feature {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      background: #f8f9ff;
+      border-radius: 12px;
+    }
+    .feature i {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    .feature span { font-size: 13px; color: #444; font-weight: 500; }
+    .buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+      transition: all 0.3s ease;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
+    }
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+    .btn-secondary:hover {
+      background: #e0e0e0;
+      transform: translateY(-2px);
+    }
+    .footer {
+      margin-top: 24px;
+      color: rgba(255,255,255,0.8);
+      font-size: 14px;
+    }
+    .footer a {
+      color: white;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .footer a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>✓ OK</h1>
-    <p>Service is running</p>
+  <div class="card">
+    <div class="logo"><i class="fas fa-route"></i></div>
+    <h1>AnyRouter</h1>
+    <p class="tagline">轻量级 API 代理服务</p>
+    <div class="status"><i class="fas fa-circle"></i> 服务运行中</div>
+    <div class="features">
+      <div class="feature"><i class="fas fa-globe"></i><span>多端点代理</span></div>
+      <div class="feature"><i class="fas fa-key"></i><span>Token 管理</span></div>
+      <div class="feature"><i class="fas fa-shield-alt"></i><span>安全转发</span></div>
+      <div class="feature"><i class="fas fa-bolt"></i><span>边缘加速</span></div>
+    </div>
+    <div class="buttons">
+      <a href="/admin" class="btn btn-primary"><i class="fas fa-cog"></i>管理面板</a>
+      <a href="https://github.com/dext7r/anyrouter" target="_blank" class="btn btn-secondary"><i class="fab fa-github"></i>GitHub</a>
+    </div>
+  </div>
+  <div class="footer">
+    Powered by <a href="https://workers.cloudflare.com" target="_blank">Cloudflare Workers</a>
   </div>
 </body>
 </html>`;
@@ -781,9 +915,14 @@ function getAdminHtml() {
           </h1>
           <p class="text-purple-100">管理你的 API 端点和密钥配置</p>
         </div>
-        <button id="logoutBtn" class="glass-effect px-6 py-3 text-purple-700 rounded-xl hover:bg-white transition-all font-semibold shadow-lg">
-          <i class="fas fa-sign-out-alt mr-2"></i>退出登录
-        </button>
+        <div class="flex gap-3">
+          <a href="https://github.com/dext7r/anyrouter" target="_blank" class="glass-effect px-6 py-3 text-purple-700 rounded-xl hover:bg-white transition-all font-semibold shadow-lg">
+            <i class="fab fa-github mr-2"></i>GitHub
+          </a>
+          <button id="logoutBtn" class="glass-effect px-6 py-3 text-purple-700 rounded-xl hover:bg-white transition-all font-semibold shadow-lg">
+            <i class="fas fa-sign-out-alt mr-2"></i>退出登录
+          </button>
+        </div>
       </div>
 
       <!-- Stats Cards -->
