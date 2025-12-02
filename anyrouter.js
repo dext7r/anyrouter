@@ -433,6 +433,41 @@ async function handleApiRequest(request, env, url) {
     return jsonResponse(result, result.success ? 200 : 400);
   }
 
+  // GET /api/status - 获取系统状态（存储模式、数据库连接）
+  if (path === "/api/status" && request.method === "GET") {
+    const hasDbConfig = Boolean(env.SUPABASE_URL && env.SUPABASE_KEY);
+    const result = {
+      success: true,
+      storage_mode: hasDbConfig ? "database" : "passthrough",
+      database_configured: hasDbConfig,
+      database_connected: false,
+    };
+
+    if (hasDbConfig) {
+      // 测试数据库连接
+      try {
+        const response = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/api_configs?select=count&limit=1`,
+          {
+            headers: {
+              apikey: env.SUPABASE_KEY,
+              Authorization: `Bearer ${env.SUPABASE_KEY}`,
+            },
+          }
+        );
+        result.database_connected = response.ok;
+        if (!response.ok) {
+          result.database_error = `HTTP ${response.status}`;
+        }
+      } catch (error) {
+        result.database_connected = false;
+        result.database_error = error.message;
+      }
+    }
+
+    return jsonResponse(result);
+  }
+
   return jsonResponse({ error: "Not found" }, 404);
 }
 
@@ -926,7 +961,25 @@ function getAdminHtml() {
       </div>
 
       <!-- Stats Cards -->
-      <div id="statsCards" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div id="statsCards" class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <!-- 存储模式卡片 -->
+        <div class="glass-effect rounded-2xl p-6 card-hover">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <p class="text-gray-500 text-sm font-medium mb-1">存储模式</p>
+              <h3 id="storageMode" class="text-xl font-bold text-gray-800">检测中...</h3>
+            </div>
+            <div id="storageModeIcon" class="p-4 bg-gray-100 rounded-xl">
+              <i class="fas fa-circle-notch fa-spin text-gray-400 text-2xl"></i>
+            </div>
+          </div>
+          <div id="dbStatus" class="text-xs text-gray-500">
+            <span id="dbStatusText">正在检测...</span>
+          </div>
+          <button id="testDbBtn" class="mt-3 w-full py-2 text-sm bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-all font-medium">
+            <i class="fas fa-plug mr-1"></i>测试连接
+          </button>
+        </div>
         <div class="glass-effect rounded-2xl p-6 card-hover">
           <div class="flex items-center justify-between">
             <div>
@@ -1232,6 +1285,7 @@ function getAdminHtml() {
     let authToken = localStorage.getItem('authToken');
     let currentConfigs = [];
     let currentEditId = null;
+    let isDatabaseMode = false;
 
     // 初始化
     $(document).ready(function() {
@@ -1244,6 +1298,11 @@ function getAdminHtml() {
       // 更新示例中的代理 URL 为当前域名
       const proxyUrl = window.location.origin;
       $('#proxyUrlExample').text(proxyUrl);
+
+      // 测试数据库连接按钮
+      $('#testDbBtn').click(function() {
+        checkSystemStatus();
+      });
       $('.proxy-url-placeholder').text(proxyUrl);
     });
 
@@ -1475,12 +1534,15 @@ function getAdminHtml() {
     // 渲染表格（分组视图）
     function renderTable(rows) {
       if (rows.length === 0) {
+        const emptyMsg = isDatabaseMode
+          ? '<p class="text-sm text-gray-400 mt-2">点击上方按钮添加第一个配置</p>'
+          : '<p class="text-sm text-yellow-600 mt-2"><i class="fas fa-info-circle mr-1"></i>当前为直传模式，无需配置即可使用</p>';
         $('#configsTableBody').html(\`
           <tr>
             <td colspan="7" class="text-center text-gray-500 py-12">
-              <i class="fas fa-inbox text-6xl mb-4 text-gray-300"></i>
-              <p class="text-xl font-medium">暂无配置</p>
-              <p class="text-sm text-gray-400 mt-2">点击上方按钮添加第一个配置</p>
+              <i class="fas \${isDatabaseMode ? 'fa-inbox' : 'fa-bolt'} text-6xl mb-4 \${isDatabaseMode ? 'text-gray-300' : 'text-yellow-300'}"></i>
+              <p class="text-xl font-medium">\${isDatabaseMode ? '暂无配置' : '直传模式'}</p>
+              \${emptyMsg}
             </td>
           </tr>
         \`);
@@ -1534,9 +1596,9 @@ function getAdminHtml() {
                   <button class="px-3 py-2 bg-blue-100 text-blue-600 text-sm rounded-lg hover:bg-blue-200 transition-all copy-url-btn" title="复制 URL" data-url="\${encodeURIComponent(apiUrl)}">
                     <i class="fas fa-copy mr-1"></i>复制 URL
                   </button>
-                  <button class="px-3 py-2 bg-green-100 text-green-600 text-sm rounded-lg hover:bg-green-200 transition-all add-token-btn" title="添加 Token" data-url="\${encodeURIComponent(apiUrl)}">
+                  \${isDatabaseMode ? \`<button class="px-3 py-2 bg-green-100 text-green-600 text-sm rounded-lg hover:bg-green-200 transition-all add-token-btn" title="添加 Token" data-url="\${encodeURIComponent(apiUrl)}">
                     <i class="fas fa-plus mr-1"></i>添加 Token
-                  </button>
+                  </button>\` : ''}
                 </div>
               </div>
             </td>
@@ -1867,6 +1929,81 @@ function getAdminHtml() {
     function showAdminPanel() {
       $('#loginPanel').addClass('hidden');
       $('#adminPanel').removeClass('hidden');
+      checkSystemStatus();
+    }
+
+    // 检查系统状态
+    async function checkSystemStatus() {
+      const btn = $('#testDbBtn');
+      btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i>检测中...');
+
+      try {
+        const response = await fetch('/api/status', {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const result = await response.json();
+
+        if (result.success) {
+          isDatabaseMode = result.database_configured && result.database_connected;
+          updateStorageModeUI(result);
+        } else {
+          updateStorageModeUI({ storage_mode: 'passthrough', database_configured: false, database_connected: false });
+        }
+      } catch (error) {
+        updateStorageModeUI({ storage_mode: 'passthrough', database_configured: false, database_connected: false, database_error: error.message });
+      } finally {
+        btn.prop('disabled', false).html('<i class="fas fa-plug mr-1"></i>测试连接');
+      }
+    }
+
+    // 更新存储模式 UI
+    function updateStorageModeUI(status) {
+      const modeText = $('#storageMode');
+      const modeIcon = $('#storageModeIcon');
+      const dbStatusText = $('#dbStatusText');
+      const addCard = $('.add-config-card');
+
+      if (status.database_configured && status.database_connected) {
+        // 数据库模式 - 已连接
+        modeText.text('数据库模式').removeClass('text-gray-800 text-yellow-600').addClass('text-green-600');
+        modeIcon.removeClass('bg-gray-100 bg-yellow-100').addClass('bg-green-100')
+          .html('<i class="fas fa-database text-green-600 text-2xl"></i>');
+        dbStatusText.html('<i class="fas fa-check-circle text-green-500 mr-1"></i>Supabase 已连接');
+        setDatabaseModeEnabled(true);
+      } else if (status.database_configured && !status.database_connected) {
+        // 数据库模式 - 连接失败
+        modeText.text('数据库模式').removeClass('text-gray-800 text-green-600').addClass('text-yellow-600');
+        modeIcon.removeClass('bg-gray-100 bg-green-100').addClass('bg-yellow-100')
+          .html('<i class="fas fa-exclamation-triangle text-yellow-600 text-2xl"></i>');
+        dbStatusText.html('<i class="fas fa-times-circle text-red-500 mr-1"></i>连接失败: ' + (status.database_error || '未知错误'));
+        setDatabaseModeEnabled(false);
+      } else {
+        // 直传模式
+        modeText.text('直传模式').removeClass('text-green-600 text-yellow-600').addClass('text-gray-800');
+        modeIcon.removeClass('bg-green-100 bg-yellow-100').addClass('bg-gray-100')
+          .html('<i class="fas fa-bolt text-gray-600 text-2xl"></i>');
+        dbStatusText.html('<i class="fas fa-info-circle text-blue-500 mr-1"></i>未配置数据库，仅支持直传 Token');
+        setDatabaseModeEnabled(false);
+      }
+    }
+
+    // 设置数据库模式功能启用/禁用
+    function setDatabaseModeEnabled(enabled) {
+      isDatabaseMode = enabled;
+      const addBtn = $('#addBtn');
+      const addInputs = $('#newApiUrl, #newToken, #newEnabled');
+
+      if (enabled) {
+        addBtn.prop('disabled', false).removeClass('opacity-50 cursor-not-allowed');
+        addInputs.prop('disabled', false).removeClass('bg-gray-100');
+        $('#addConfigNotice').remove();
+      } else {
+        addBtn.prop('disabled', true).addClass('opacity-50 cursor-not-allowed');
+        addInputs.prop('disabled', true).addClass('bg-gray-100');
+        if ($('#addConfigNotice').length === 0) {
+          $('#addBtn').after('<p id="addConfigNotice" class="text-xs text-yellow-600 mt-2"><i class="fas fa-info-circle mr-1"></i>需要配置数据库才能添加 Token</p>');
+        }
+      }
     }
 
     function showError(msg) {
