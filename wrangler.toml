@@ -1,0 +1,31 @@
+# AnyRouter - Cloudflare Workers 配置
+# 敏感信息请通过 Cloudflare Dashboard 或 wrangler secret 配置
+
+name = "anyrouter"
+main = "anyrouter.js"
+compatibility_date = "2024-01-01"
+
+# ============================================
+# 环境变量说明
+# ============================================
+# 以下变量需要在 Cloudflare Dashboard -> Settings -> Variables and Secrets 中配置
+# 或使用 wrangler secret put <变量名> 命令设置
+#
+# 必须配置：
+#   ADMIN_PASSWORD - 管理面板登录密码
+#
+# 可选配置（密钥管理功能）：
+#   SUPABASE_URL - Supabase 项目 URL
+#   SUPABASE_KEY - Supabase anon/public key
+#
+# 可选配置（统计和缓存功能）：
+#   UPSTASH_REDIS_URL - Upstash Redis REST URL
+#   UPSTASH_REDIS_TOKEN - Upstash Redis REST Token
+
+# ============================================
+# KV 缓存配置（可选）
+# ============================================
+# 创建 KV: npx wrangler kv:namespace create "CONFIG_CACHE"
+# [[kv_namespaces]]
+# binding = "CONFIG_KV"
+# id = "your-kv-namespace-id"
